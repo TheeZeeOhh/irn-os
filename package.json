@@ -4,6 +4,11 @@
   "description": "Premium multi-provider AI CLI, TUI, and Web Dashboard",
   "main": "bin/cli.js",
   "type": "module",
+  "files": [
+    "bin",
+    "server",
+    "dist"
+  ],
   "bin": {
     "irn-os": "./bin/cli.js"
   },
