@@ -49,6 +49,341 @@ export default function App() {
   const [supabaseBucket, setSupabaseBucket] = useState('irn-os-uploads');
   const [uploadingFile, setUploadingFile] = useState(false);
 
+  // Integration Hub & History & Budget states
+  const [chatHistoryList, setChatHistoryList] = useState([]);
+  const [currentHistoryId, setCurrentHistoryId] = useState(null);
+  const [activePreset, setActivePreset] = useState('');
+  const [presetList, setPresetList] = useState([]);
+  const [dailyBudget, setDailyBudget] = useState(5.00);
+  const [monthlyBudget, setMonthlyBudget] = useState(50.00);
+  const [googleQuery, setGoogleQuery] = useState('');
+  const [googleResults, setGoogleResults] = useState([]);
+  const [notionTitle, setNotionTitle] = useState('');
+  const [notionContent, setNotionContent] = useState('');
+  const [notionOutput, setNotionOutput] = useState('');
+
+  // Integration credentials & state management
+  const [googleApiKey, setGoogleApiKey] = useState('');
+  const [googleCx, setGoogleCx] = useState('');
+  const [googleClientId, setGoogleClientId] = useState('');
+  const [googleClientSecret, setGoogleClientSecret] = useState('');
+  const [googleRefreshToken, setGoogleRefreshToken] = useState('');
+  const [notionApiKey, setNotionApiKey] = useState('');
+  const [notionDatabaseId, setNotionDatabaseId] = useState('');
+
+  // Loaded data lists from APIs
+  const [gmailList, setGmailList] = useState([]);
+  const [calendarEvents, setCalendarEvents] = useState([]);
+  const [driveFiles, setDriveFiles] = useState([]);
+  const [notionDatabases, setNotionDatabases] = useState([]);
+
+  // Create event & email states
+  const [gmailTo, setGmailTo] = useState('');
+  const [gmailSubject, setGmailSubject] = useState('');
+  const [gmailBody, setGmailBody] = useState('');
+  const [calSummary, setCalSummary] = useState('');
+  const [calStart, setCalStart] = useState('');
+  const [calEnd, setCalEnd] = useState('');
+  const [calDesc, setCalDesc] = useState('');
+  const [notionPageId, setNotionPageId] = useState('');
+  const [notionAppendContent, setNotionAppendContent] = useState('');
+
+  const fetchHistories = async () => {
+    try {
+      const res = await fetch('/api/history');
+      const data = await res.json();
+      setChatHistoryList(data);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const loadHistory = async (id) => {
+    try {
+      const res = await fetch(`/api/history/${id}`);
+      const data = await res.json();
+      setChatMessages(data.messages);
+      setCurrentHistoryId(data.historyId);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const saveHistorySession = async (msgs) => {
+    const historyId = currentHistoryId || `chat-${Date.now()}`;
+    const firstUserMsg = msgs.find(m => m.role === 'user');
+    const title = firstUserMsg ? firstUserMsg.content.substring(0, 30) : 'New Conversation';
+    try {
+      await fetch('/api/history', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ historyId, title, messages: msgs })
+      });
+      setCurrentHistoryId(historyId);
+      fetchHistories();
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const deleteHistory = async (id) => {
+    try {
+      await fetch(`/api/history/${id}`, { method: 'DELETE' });
+      if (currentHistoryId === id) {
+        setChatMessages([{ role: 'assistant', content: 'Welcome to IRN-OS. Select a model and start building.' }]);
+        setCurrentHistoryId(null);
+      }
+      fetchHistories();
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const fetchPresets = async () => {
+    try {
+      const res = await fetch('/api/presets');
+      const data = await res.json();
+      setPresetList(data);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const fetchBudget = async () => {
+    try {
+      const res = await fetch('/api/budget');
+      const data = await res.json();
+      setDailyBudget(data.dailyLimit);
+      setMonthlyBudget(data.monthlyLimit);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const saveBudgetLimit = async () => {
+    try {
+      const res = await fetch('/api/budget', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ dailyLimit: dailyBudget, monthlyLimit: monthlyBudget })
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert('Budget caps updated!');
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const fetchIntegrationConfig = async () => {
+    try {
+      const res = await fetch('/api/integrations/config');
+      const data = await res.json();
+      if (data) {
+        setGoogleApiKey(data.google?.apiKey || '');
+        setGoogleCx(data.google?.cx || '');
+        setGoogleClientId(data.google?.clientId || '');
+        setGoogleClientSecret(data.google?.clientSecret || '');
+        setGoogleRefreshToken(data.google?.refreshToken || '');
+        setNotionApiKey(data.notion?.apiKey || '');
+        setNotionDatabaseId(data.notion?.databaseId || '');
+      }
+    } catch (err) {
+      console.error('Error fetching integrations config:', err);
+    }
+  };
+
+  const saveIntegrationConfig = async () => {
+    try {
+      const res = await fetch('/api/integrations/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          google: {
+            apiKey: googleApiKey,
+            cx: googleCx,
+            clientId: googleClientId,
+            clientSecret: googleClientSecret,
+            refreshToken: googleRefreshToken
+          },
+          notion: {
+            apiKey: notionApiKey,
+            databaseId: notionDatabaseId
+          }
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert('🌐 Integration Credentials Saved successfully!');
+      }
+    } catch (err) {
+      alert(`Error saving credentials: ${err.message}`);
+    }
+  };
+
+  const runGoogleSearch = async () => {
+    if (!googleQuery.trim()) return;
+    try {
+      const res = await fetch('/api/mcp/google', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: googleQuery, action: 'search' })
+      });
+      const data = await res.json();
+      setGoogleResults(data.results || []);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const fetchGmailList = async () => {
+    try {
+      const res = await fetch('/api/mcp/google', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'gmail_list' })
+      });
+      const data = await res.json();
+      setGmailList(data.messages || []);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const sendGmailEmail = async () => {
+    if (!gmailTo.trim() || !gmailSubject.trim()) {
+      alert('Recipient and Subject are required.');
+      return;
+    }
+    try {
+      const res = await fetch('/api/mcp/google', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'gmail_send',
+          to: gmailTo,
+          subject: gmailSubject,
+          body: gmailBody
+        })
+      });
+      const data = await res.json();
+      alert(data.message || 'Email sent successfully!');
+      setGmailTo('');
+      setGmailSubject('');
+      setGmailBody('');
+    } catch (err) {
+      alert(`Failed to send email: ${err.message}`);
+    }
+  };
+
+  const fetchCalendarEvents = async () => {
+    try {
+      const res = await fetch('/api/mcp/google', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'calendar_list' })
+      });
+      const data = await res.json();
+      setCalendarEvents(data.events || []);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const createCalendarEvent = async () => {
+    if (!calSummary.trim()) {
+      alert('Event Summary is required.');
+      return;
+    }
+    try {
+      const res = await fetch('/api/mcp/google', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'calendar_create',
+          summary: calSummary,
+          startTime: calStart,
+          endTime: calEnd,
+          description: calDesc
+        })
+      });
+      const data = await res.json();
+      alert(data.message || 'Event created successfully!');
+      setCalSummary('');
+      setCalStart('');
+      setCalEnd('');
+      setCalDesc('');
+      fetchCalendarEvents();
+    } catch (err) {
+      alert(`Failed to schedule event: ${err.message}`);
+    }
+  };
+
+  const fetchDriveFiles = async () => {
+    try {
+      const res = await fetch('/api/mcp/google', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'drive_list' })
+      });
+      const data = await res.json();
+      setDriveFiles(data.files || []);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const runNotionCreate = async () => {
+    if (!notionTitle.trim()) return;
+    try {
+      const res = await fetch('/api/mcp/notion', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'page_create', pageTitle: notionTitle, content: notionContent })
+      });
+      const data = await res.json();
+      setNotionOutput(data.message + (data.notionUrl ? '\nURL: ' + data.notionUrl : ''));
+      setNotionTitle('');
+      setNotionContent('');
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const fetchNotionDatabases = async () => {
+    try {
+      const res = await fetch('/api/mcp/notion', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'database_list' })
+      });
+      const data = await res.json();
+      setNotionDatabases(data.databases || []);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const appendNotionPage = async () => {
+    if (!notionPageId.trim() || !notionAppendContent.trim()) {
+      alert('Page ID and content are required.');
+      return;
+    }
+    try {
+      const res = await fetch('/api/mcp/notion', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'page_append', pageId: notionPageId, content: notionAppendContent })
+      });
+      const data = await res.json();
+      alert(data.message || 'Appended content successfully.');
+      setNotionAppendContent('');
+    } catch (err) {
+      alert(`Error appending to page: ${err.message}`);
+    }
+  };
+
   const fetchFileList = async () => {
     try {
       const res = await fetch('/api/files');
@@ -111,6 +446,10 @@ export default function App() {
     fetchConfig();
     fetchModels();
     fetchTelemetry();
+    fetchHistories();
+    fetchPresets();
+    fetchBudget();
+    fetchIntegrationConfig();
   }, []);
 
   const fetchTelemetry = async () => {
@@ -181,7 +520,17 @@ export default function App() {
     
     const promptText = inputMessage;
     const userMsg = { role: 'user', content: promptText };
-    const updatedMessages = [...chatMessages, userMsg];
+    
+    // Inject preset system message if active
+    let updatedMessages = [...chatMessages];
+    if (activePreset && !updatedMessages.some(m => m.role === 'system')) {
+      const presetObj = presetList.find(p => p.id === activePreset);
+      if (presetObj) {
+        updatedMessages = [{ role: 'system', content: presetObj.prompt }, ...updatedMessages];
+      }
+    }
+    
+    updatedMessages.push(userMsg);
     setChatMessages(updatedMessages);
     setInputMessage('');
     setChatLoading(true);
@@ -209,7 +558,9 @@ export default function App() {
       setSessionResponseTimes(prev => [...prev, durationSec]);
 
       if (res.ok) {
-        setChatMessages(prev => [...prev, { role: 'assistant', content: data.text }]);
+        const finalMessages = [...updatedMessages, { role: 'assistant', content: data.text }];
+        setChatMessages(finalMessages);
+        saveHistorySession(finalMessages); // Save history locally
         
         // Approximate generated tokens (Tu) and rate (Rp)
         const tokensGenerated = Math.ceil(data.text.length / 4);
@@ -305,7 +656,7 @@ export default function App() {
       <div className="sidebar">
         <div>
           <div className="logo-section">
-            <div className="logo-icon">⚡</div>
+            <img src="/irn-crest.png" alt="IRN Crest" className="logo-icon" style={{ width: '36px', height: '36px', objectFit: 'contain' }} />
             <div className="logo-text">
               <h1>IRN-OS</h1>
               <span>AI PLATFORM</span>
@@ -333,6 +684,9 @@ export default function App() {
             <a className={`nav-item ${activeTab === 'files' ? 'active' : ''}`} onClick={() => { setActiveTab('files'); fetchFileList(); }}>
               📂 File Storage
             </a>
+            <a className={`nav-item ${activeTab === 'integrations' ? 'active' : ''}`} onClick={() => setActiveTab('integrations')}>
+              🔌 Integration Hub
+            </a>
           </div>
         </div>
         <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
@@ -355,29 +709,68 @@ export default function App() {
 
         <div className="page-wrapper">
           {activeTab === 'chat' && (
-            <div className="chat-container">
-              <div className="chat-header">
-                <div>
-                  <h3 style={{ margin: 0 }}>AI Development Playground</h3>
-                  <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                    Streaming completions with automatic API rotation
-                  </p>
-                </div>
-                <div style={{ display: 'flex', gap: '8px' }}>
-                  <select className="form-control" value={selectedProvider} onChange={handleProviderChange} style={{ width: '120px', padding: '6px' }}>
-                    <option value="gemini">Gemini</option>
-                    <option value="anthropic">Anthropic</option>
-                    <option value="openai">OpenAI</option>
-                    <option value="ollama">Ollama</option>
-                  </select>
-                  <select className="form-control" value={selectedModel} onChange={(e) => setSelectedModel(e.target.value)} style={{ width: '180px', padding: '6px' }}>
-                    {(availableModels[selectedProvider] || []).map(m => (
-                      <option key={m} value={m}>{m}</option>
-                    ))}
-                  </select>
-                  <button className="btn-primary" onClick={saveSettings} style={{ padding: '6px 12px', fontSize: '0.9rem' }}>Make Default</button>
+            <div style={{ display: 'flex', gap: '20px', height: '100%', alignItems: 'stretch' }}>
+              {/* History Side Panel */}
+              <div className="panel" style={{ width: '240px', flexShrink: 0, display: 'flex', flexDirection: 'column', marginBottom: 0, height: '100%', overflowY: 'auto' }}>
+                <h4 style={{ marginBottom: '12px', borderBottom: '1px solid var(--border-glass)', paddingBottom: '8px' }}>💬 Chat Logs</h4>
+                <button className="btn-primary" onClick={() => {
+                  setChatMessages([{ role: 'assistant', content: 'Welcome to IRN-OS. Select a model and start building.' }]);
+                  setCurrentHistoryId(null);
+                }} style={{ padding: '8px', fontSize: '0.85rem', marginBottom: '12px', width: '100%' }}>+ New Chat</button>
+                
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', flexGrow: 1, overflowY: 'auto' }}>
+                  {chatHistoryList.length === 0 ? (
+                    <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', textAlign: 'center', marginTop: '20px' }}>No saved chats</span>
+                  ) : (
+                    chatHistoryList.map(h => (
+                      <div key={h.historyId} style={{ 
+                        display: 'flex', 
+                        justifyContent: 'space-between', 
+                        alignItems: 'center', 
+                        fontSize: '0.85rem', 
+                        padding: '8px', 
+                        background: currentHistoryId === h.historyId ? 'rgba(59,130,246,0.15)' : 'rgba(255,255,255,0.02)', 
+                        borderRadius: 'var(--radius-sm)', 
+                        border: currentHistoryId === h.historyId ? '1px solid rgba(59,130,246,0.4)' : '1px solid var(--border-glass)' 
+                      }}>
+                        <span onClick={() => loadHistory(h.historyId)} style={{ cursor: 'pointer', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', width: '80%', color: currentHistoryId === h.historyId ? 'white' : 'var(--text-secondary)' }}>{h.title}</span>
+                        <button onClick={() => deleteHistory(h.historyId)} style={{ background: 'none', border: 'none', color: 'var(--accent-red)', cursor: 'pointer', fontWeight: 'bold', fontSize: '1.1rem' }}>&times;</button>
+                      </div>
+                    ))
+                  )}
                 </div>
               </div>
+
+              {/* Chat Play area */}
+              <div className="chat-container" style={{ flexGrow: 1, height: '100%', marginBottom: 0 }}>
+                <div className="chat-header">
+                  <div>
+                    <h3 style={{ margin: 0 }}>AI Development Playground</h3>
+                    <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                      Streaming completions with automatic API rotation
+                    </p>
+                  </div>
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    <select className="form-control" value={activePreset} onChange={(e) => setActivePreset(e.target.value)} style={{ width: '130px', padding: '6px' }}>
+                      <option value="">No Preset</option>
+                      {presetList.map(p => (
+                        <option key={p.id} value={p.id}>{p.name}</option>
+                      ))}
+                    </select>
+                    <select className="form-control" value={selectedProvider} onChange={handleProviderChange} style={{ width: '110px', padding: '6px' }}>
+                      <option value="gemini">Gemini</option>
+                      <option value="anthropic">Anthropic</option>
+                      <option value="openai">OpenAI</option>
+                      <option value="ollama">Ollama</option>
+                    </select>
+                    <select className="form-control" value={selectedModel} onChange={(e) => setSelectedModel(e.target.value)} style={{ width: '150px', padding: '6px' }}>
+                      {(availableModels[selectedProvider] || []).map(m => (
+                        <option key={m} value={m}>{m}</option>
+                      ))}
+                    </select>
+                    <button className="btn-primary" onClick={saveSettings} style={{ padding: '6px 12px', fontSize: '0.9rem' }}>Pin</button>
+                  </div>
+                </div>
 
               <div className="chat-messages">
                 {chatMessages.map((msg, index) => (
@@ -411,6 +804,7 @@ export default function App() {
                 <button className="send-btn" onClick={handleSendMessage}>Send</button>
               </div>
             </div>
+          </div>
           )}
 
           {activeTab === 'keys' && (
@@ -530,6 +924,32 @@ export default function App() {
                   </div>
                 </div>
                 <button className="btn-primary" onClick={saveSupabaseConfig} style={{ marginTop: '12px' }}>Save Supabase Configuration</button>
+              </div>
+
+              {/* Budget Caps Panel */}
+              <div className="panel" style={{ marginTop: '24px' }}>
+                <h3 className="card-title">💰 Budget limits & Telemetry Alerts</h3>
+                <div className="grid-2" style={{ gap: '16px', marginTop: '12px' }}>
+                  <div className="form-group">
+                    <label>Daily Spend Limit (USD)</label>
+                    <input
+                      type="number"
+                      className="form-control"
+                      value={dailyBudget}
+                      onChange={(e) => setDailyBudget(e.target.value)}
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>Monthly Spend Limit (USD)</label>
+                    <input
+                      type="number"
+                      className="form-control"
+                      value={monthlyBudget}
+                      onChange={(e) => setMonthlyBudget(e.target.value)}
+                    />
+                  </div>
+                </div>
+                <button className="btn-primary" onClick={saveBudgetLimit} style={{ marginTop: '12px' }}>Save Budget Caps</button>
               </div>
             </div>
           )}
@@ -1225,6 +1645,330 @@ model = get_peft_model(model, peft_config)
                     </div>
                   )}
                 </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'integrations' && (
+            <div>
+              <h2>🔌 Connectors & Integration Hub</h2>
+              <p style={{ color: 'var(--text-secondary)', marginBottom: '24px' }}>
+                Securely configure credentials, query Google databases, manage Gmail/Calendar/Drive workspace tools, and synchronize notes directly to Notion.
+              </p>
+
+              {/* API Credentials Configuration Panel */}
+              <div className="panel" style={{ borderLeft: '4px solid var(--accent-orange)', marginBottom: '24px' }}>
+                <h3 className="card-title" style={{ color: 'var(--accent-orange)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  🔑 Integration Credentials Manager
+                </h3>
+                <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '16px' }}>
+                  Provide credentials for Google OAuth/Search APIs and Notion workspace. Leave blank to run in fully interactive sandbox mode.
+                </p>
+                <div className="grid-2" style={{ gap: '16px', marginBottom: '16px' }}>
+                  <div>
+                    <h4 style={{ color: '#aaa', fontSize: '0.9rem', marginBottom: '12px' }}>Google Credentials</h4>
+                    <div className="form-group">
+                      <label>Google Custom Search API Key</label>
+                      <input
+                        type="password"
+                        className="form-control"
+                        placeholder="AIzaSy..."
+                        value={googleApiKey}
+                        onChange={(e) => setGoogleApiKey(e.target.value)}
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label>Google Custom Search Engine ID (CX)</label>
+                      <input
+                        type="text"
+                        className="form-control"
+                        placeholder="e.g. 0123456789abcdef0"
+                        value={googleCx}
+                        onChange={(e) => setGoogleCx(e.target.value)}
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label>Google OAuth Client ID</label>
+                      <input
+                        type="text"
+                        className="form-control"
+                        placeholder="*.apps.googleusercontent.com"
+                        value={googleClientId}
+                        onChange={(e) => setGoogleClientId(e.target.value)}
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label>Google OAuth Client Secret</label>
+                      <input
+                        type="password"
+                        className="form-control"
+                        placeholder="Client Secret"
+                        value={googleClientSecret}
+                        onChange={(e) => setGoogleClientSecret(e.target.value)}
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label>Google OAuth Refresh Token</label>
+                      <input
+                        type="password"
+                        className="form-control"
+                        placeholder="Refresh Token"
+                        value={googleRefreshToken}
+                        onChange={(e) => setGoogleRefreshToken(e.target.value)}
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <h4 style={{ color: '#aaa', fontSize: '0.9rem', marginBottom: '12px' }}>Notion Credentials</h4>
+                    <div className="form-group">
+                      <label>Notion Integration Key (Secret Token)</label>
+                      <input
+                        type="password"
+                        className="form-control"
+                        placeholder="secret_..."
+                        value={notionApiKey}
+                        onChange={(e) => setNotionApiKey(e.target.value)}
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label>Notion Parent Database ID</label>
+                      <input
+                        type="text"
+                        className="form-control"
+                        placeholder="e.g. 1a2b3c4d5e6f..."
+                        value={notionDatabaseId}
+                        onChange={(e) => setNotionDatabaseId(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                </div>
+                <button className="btn-primary" onClick={saveIntegrationConfig}>Save Credentials</button>
+              </div>
+
+              {/* Workspace Tools Dashboard */}
+              <div className="grid-2">
+                
+                {/* Google Workspace all tools */}
+                <div className="panel" style={{ borderLeft: '4px solid var(--accent-cyan)' }}>
+                  <h3 className="card-title" style={{ color: 'var(--accent-cyan)' }}>🤖 Google Workspace Suite</h3>
+                  <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '16px' }}>
+                    Interact directly with Google Search, Gmail inbox, Calendar scheduler, and Drive files.
+                  </p>
+
+                  {/* Google Custom Search Section */}
+                  <div style={{ marginBottom: '24px', borderBottom: '1px solid var(--border-glass)', paddingBottom: '20px' }}>
+                    <h4 style={{ color: 'white', fontSize: '0.9rem', marginBottom: '10px' }}>🔍 Web Search API</h4>
+                    <div style={{ display: 'flex', gap: '12px', marginBottom: '12px' }}>
+                      <input
+                        type="text"
+                        className="form-control"
+                        placeholder="Query Google search..."
+                        value={googleQuery}
+                        onChange={(e) => setGoogleQuery(e.target.value)}
+                      />
+                      <button className="btn-primary" onClick={runGoogleSearch}>Search</button>
+                    </div>
+                    {googleResults.length > 0 && (
+                      <div style={{ maxHeight: '180px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        {googleResults.map((r, i) => (
+                          <div key={i} style={{ background: 'rgba(0,0,0,0.2)', padding: '10px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-glass)' }}>
+                            <a href={r.link} target="_blank" rel="noreferrer" style={{ fontSize: '0.85rem', color: 'var(--accent-cyan)', fontWeight: 'bold' }}>{r.title}</a>
+                            <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '4px' }}>{r.snippet}</p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Gmail Section */}
+                  <div style={{ marginBottom: '24px', borderBottom: '1px solid var(--border-glass)', paddingBottom: '20px' }}>
+                    <h4 style={{ color: 'white', fontSize: '0.9rem', marginBottom: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span>✉️ Gmail Assistant</span>
+                      <button className="btn-primary" style={{ padding: '4px 10px', fontSize: '0.75rem' }} onClick={fetchGmailList}>Fetch Emails</button>
+                    </h4>
+                    
+                    {gmailList.length > 0 && (
+                      <div style={{ maxHeight: '150px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '12px' }}>
+                        {gmailList.map((m, i) => (
+                          <div key={i} style={{ background: 'rgba(0,0,0,0.2)', padding: '10px', borderRadius: 'var(--radius-md)', fontSize: '0.8rem' }}>
+                            <strong>From:</strong> {m.from}<br />
+                            <strong>Subject:</strong> {m.subject}<br />
+                            <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>{m.snippet}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    <div style={{ background: 'rgba(255,255,255,0.02)', padding: '12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-glass)' }}>
+                      <span style={{ fontSize: '0.8rem', color: '#aaa', fontWeight: 'bold' }}>Send Email</span>
+                      <div className="form-group" style={{ marginTop: '8px' }}>
+                        <input type="text" className="form-control" placeholder="recipient@domain.com" value={gmailTo} onChange={e => setGmailTo(e.target.value)} />
+                      </div>
+                      <div className="form-group">
+                        <input type="text" className="form-control" placeholder="Email Subject" value={gmailSubject} onChange={e => setGmailSubject(e.target.value)} />
+                      </div>
+                      <div className="form-group">
+                        <textarea className="form-control" style={{ height: '60px' }} placeholder="Email content..." value={gmailBody} onChange={e => setGmailBody(e.target.value)} />
+                      </div>
+                      <button className="btn-primary" style={{ width: '100%' }} onClick={sendGmailEmail}>Send Email</button>
+                    </div>
+                  </div>
+
+                  {/* Calendar Section */}
+                  <div style={{ marginBottom: '24px', borderBottom: '1px solid var(--border-glass)', paddingBottom: '20px' }}>
+                    <h4 style={{ color: 'white', fontSize: '0.9rem', marginBottom: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span>📅 Google Calendar Scheduler</span>
+                      <button className="btn-primary" style={{ padding: '4px 10px', fontSize: '0.75rem' }} onClick={fetchCalendarEvents}>Fetch Events</button>
+                    </h4>
+
+                    {calendarEvents.length > 0 && (
+                      <div style={{ maxHeight: '150px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '12px' }}>
+                        {calendarEvents.map((evt, i) => (
+                          <div key={i} style={{ background: 'rgba(0,0,0,0.2)', padding: '10px', borderRadius: 'var(--radius-md)', fontSize: '0.8rem' }}>
+                            <strong>{evt.summary}</strong><br />
+                            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                              Start: {new Date(evt.start).toLocaleString()} - End: {new Date(evt.end).toLocaleString()}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    <div style={{ background: 'rgba(255,255,255,0.02)', padding: '12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-glass)' }}>
+                      <span style={{ fontSize: '0.8rem', color: '#aaa', fontWeight: 'bold' }}>Schedule New Event</span>
+                      <div className="form-group" style={{ marginTop: '8px' }}>
+                        <input type="text" className="form-control" placeholder="Event Title (e.g. Brainstorm Session)" value={calSummary} onChange={e => setCalSummary(e.target.value)} />
+                      </div>
+                      <div className="form-group">
+                        <label style={{ fontSize: '0.75rem' }}>Start Time</label>
+                        <input type="datetime-local" className="form-control" value={calStart} onChange={e => setCalStart(e.target.value)} />
+                      </div>
+                      <div className="form-group">
+                        <label style={{ fontSize: '0.75rem' }}>End Time</label>
+                        <input type="datetime-local" className="form-control" value={calEnd} onChange={e => setCalEnd(e.target.value)} />
+                      </div>
+                      <div className="form-group">
+                        <textarea className="form-control" style={{ height: '50px' }} placeholder="Description..." value={calDesc} onChange={e => setCalDesc(e.target.value)} />
+                      </div>
+                      <button className="btn-primary" style={{ width: '100%' }} onClick={createCalendarEvent}>Schedule Event</button>
+                    </div>
+                  </div>
+
+                  {/* Drive Section */}
+                  <div>
+                    <h4 style={{ color: 'white', fontSize: '0.9rem', marginBottom: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span>📁 Google Drive File Explorer</span>
+                      <button className="btn-primary" style={{ padding: '4px 10px', fontSize: '0.75rem' }} onClick={fetchDriveFiles}>List Files</button>
+                    </h4>
+                    {driveFiles.length > 0 && (
+                      <div style={{ maxHeight: '150px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        {driveFiles.map((f, i) => (
+                          <div key={i} style={{ background: 'rgba(0,0,0,0.2)', padding: '10px', borderRadius: 'var(--radius-md)', fontSize: '0.8rem' }}>
+                            <a href={f.webViewLink} target="_blank" rel="noreferrer" style={{ color: 'var(--accent-cyan)', textDecoration: 'underline' }}>{f.name}</a>
+                            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginLeft: '8px' }}>({f.mimeType.split('/').pop()})</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                </div>
+
+                {/* Notion tools panel */}
+                <div className="panel" style={{ borderLeft: '4px solid var(--accent-purple)' }}>
+                  <h3 className="card-title" style={{ color: 'var(--accent-purple)' }}>📓 Notion Workspace Sync</h3>
+                  <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '16px' }}>
+                    Create, retrieve database logs, and append content to your Notion wiki nodes.
+                  </p>
+
+                  {/* Create Notion Page */}
+                  <div style={{ marginBottom: '24px', borderBottom: '1px solid var(--border-glass)', paddingBottom: '20px' }}>
+                    <h4 style={{ color: 'white', fontSize: '0.9rem', marginBottom: '10px' }}>📄 Create Database Page</h4>
+                    <div className="form-group">
+                      <label>Page Title</label>
+                      <input
+                        type="text"
+                        className="form-control"
+                        placeholder="e.g. Task Checklist"
+                        value={notionTitle}
+                        onChange={(e) => setNotionTitle(e.target.value)}
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label>Page Content (Markdown / Text)</label>
+                      <textarea
+                        className="form-control"
+                        style={{ height: '80px', fontFamily: 'var(--font-sans)', resize: 'vertical' }}
+                        placeholder="Write main paragraphs or details to append..."
+                        value={notionContent}
+                        onChange={(e) => setNotionContent(e.target.value)}
+                      />
+                    </div>
+                    <button className="btn-primary" style={{ width: '100%' }} onClick={runNotionCreate}>Create Page</button>
+                    {notionOutput && (
+                      <pre style={{
+                        background: '#040711',
+                        padding: '12px',
+                        borderRadius: 'var(--radius-md)',
+                        fontFamily: 'var(--font-mono)',
+                        color: '#10b981',
+                        border: '1px solid var(--border-glass)',
+                        marginTop: '16px',
+                        whiteSpace: 'pre-wrap',
+                        fontSize: '0.8rem'
+                      }}>
+                        {notionOutput}
+                      </pre>
+                    )}
+                  </div>
+
+                  {/* Append blocks to existing Page */}
+                  <div style={{ marginBottom: '24px', borderBottom: '1px solid var(--border-glass)', paddingBottom: '20px' }}>
+                    <h4 style={{ color: 'white', fontSize: '0.9rem', marginBottom: '10px' }}>🖋️ Append to Existing Page</h4>
+                    <div className="form-group">
+                      <label>Notion Page ID</label>
+                      <input
+                        type="text"
+                        className="form-control"
+                        placeholder="e.g. 5e2c56a297e1..."
+                        value={notionPageId}
+                        onChange={(e) => setNotionPageId(e.target.value)}
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label>Text to Append</label>
+                      <textarea
+                        className="form-control"
+                        style={{ height: '60px' }}
+                        placeholder="Append new updates, task logs, or notes..."
+                        value={notionAppendContent}
+                        onChange={(e) => setNotionAppendContent(e.target.value)}
+                      />
+                    </div>
+                    <button className="btn-primary" style={{ width: '100%' }} onClick={appendNotionPage}>Append Content</button>
+                  </div>
+
+                  {/* Notion Databases List */}
+                  <div>
+                    <h4 style={{ color: 'white', fontSize: '0.9rem', marginBottom: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span>🗄️ Discover Databases</span>
+                      <button className="btn-primary" style={{ padding: '4px 10px', fontSize: '0.75rem' }} onClick={fetchNotionDatabases}>List Databases</button>
+                    </h4>
+                    {notionDatabases.length > 0 && (
+                      <div style={{ maxHeight: '150px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        {notionDatabases.map((db, i) => (
+                          <div key={i} style={{ background: 'rgba(0,0,0,0.2)', padding: '10px', borderRadius: 'var(--radius-md)', fontSize: '0.8rem' }}>
+                            <strong>Title:</strong> {db.title?.[0]?.plain_text || 'Untitled Database'}<br />
+                            <strong>ID:</strong> <code style={{ color: '#e2e8f0', fontSize: '0.75rem' }}>{db.id}</code>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                </div>
+
               </div>
             </div>
           )}

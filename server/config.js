@@ -4,10 +4,14 @@ import os from 'os';
 
 const CONFIG_DIR = path.join(os.homedir(), '.irn-os');
 const CONFIG_FILE = path.join(CONFIG_DIR, 'config.json');
+const HISTORY_DIR = path.join(CONFIG_DIR, 'history');
 
-// Ensure config directory exists
+// Ensure directories exist
 if (!fs.existsSync(CONFIG_DIR)) {
   fs.mkdirSync(CONFIG_DIR, { recursive: true });
+}
+if (!fs.existsSync(HISTORY_DIR)) {
+  fs.mkdirSync(HISTORY_DIR, { recursive: true });
 }
 
 const defaultConfig = {
@@ -99,4 +103,41 @@ export function logUsage(providerName, modelName, tokensUsed, keyName = 'default
   config.usage[dateStr][providerName].keyUsage[keyName] = (config.usage[dateStr][providerName].keyUsage[keyName] || 0) + 1;
   
   writeConfig(config);
+}
+
+export function saveChatHistory(historyId, title, messages) {
+  const file = path.join(HISTORY_DIR, `${historyId}.json`);
+  const data = { historyId, title, messages, updatedAt: Date.now() };
+  fs.writeFileSync(file, JSON.stringify(data, null, 2), 'utf8');
+}
+
+export function getChatHistory(historyId) {
+  const file = path.join(HISTORY_DIR, `${historyId}.json`);
+  if (!fs.existsSync(file)) return null;
+  return JSON.parse(fs.readFileSync(file, 'utf8'));
+}
+
+export function listChatHistories() {
+  if (!fs.existsSync(HISTORY_DIR)) return [];
+  const files = fs.readdirSync(HISTORY_DIR);
+  return files
+    .filter(f => f.endsWith('.json'))
+    .map(f => {
+      try {
+        const raw = fs.readFileSync(path.join(HISTORY_DIR, f), 'utf8');
+        const data = JSON.parse(raw);
+        return { historyId: data.historyId, title: data.title, updatedAt: data.updatedAt };
+      } catch (err) {
+        return null;
+      }
+    })
+    .filter(Boolean)
+    .sort((a, b) => b.updatedAt - a.updatedAt);
+}
+
+export function deleteChatHistory(historyId) {
+  const file = path.join(HISTORY_DIR, `${historyId}.json`);
+  if (fs.existsSync(file)) {
+    fs.unlinkSync(file);
+  }
 }
