@@ -446,6 +446,20 @@ export default function App() {
     }
   };
 
+  const deleteTemplate = async (id) => {
+    try {
+      const res = await fetch(`/api/templates/${id}`, {
+        method: 'DELETE'
+      });
+      const data = await res.json();
+      if (data.success) {
+        setTemplatesList(data.templates);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   const getProviderForModel = (modelName) => {
     if (modelName.includes('gemini')) return 'gemini';
     if (modelName.includes('claude') || modelName.includes('sonnet') || modelName.includes('opus')) return 'anthropic';
@@ -928,6 +942,9 @@ export default function App() {
           <div className="nav-links">
             <a className={`nav-item ${activeTab === 'chat' ? 'active' : ''}`} onClick={() => setActiveTab('chat')}>
               💬 Interactive Chat
+            </a>
+            <a className={`nav-item ${activeTab === 'templates' ? 'active' : ''}`} onClick={() => { setActiveTab('templates'); fetchTemplates(); }}>
+              📋 Prompt Library
             </a>
             <a className={`nav-item ${activeTab === 'arena' ? 'active' : ''}`} onClick={() => setActiveTab('arena')}>
               ⚔️ Model Arena
@@ -1893,6 +1910,115 @@ model = get_peft_model(model, peft_config)
               </div>
             );
           })()}
+
+          {activeTab === 'templates' && (
+            <div>
+              <h2>📋 Custom Prompt Templates Library</h2>
+              <p style={{ color: 'var(--text-secondary)', marginBottom: '24px' }}>
+                Store, manage, and inspect system prompt instructions to reuse them instantly across conversations and model comparisons.
+              </p>
+
+              <div className="grid-2">
+                {/* Save Prompt Template Form */}
+                <div className="panel" style={{ borderLeft: '4px solid var(--accent-orange)' }}>
+                  <h3 className="card-title" style={{ color: 'var(--accent-orange)' }}>➕ Create New Prompt Template</h3>
+                  <div className="form-group" style={{ marginTop: '12px' }}>
+                    <label>Template Title</label>
+                    <input
+                      type="text"
+                      className="form-control"
+                      placeholder="e.g. Unit Test Writer"
+                      value={newTemplateTitle}
+                      onChange={(e) => setNewTemplateTitle(e.target.value)}
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>Prompt Template text</label>
+                    <textarea
+                      className="form-control"
+                      style={{ height: '180px', fontFamily: 'var(--font-sans)', fontSize: '0.85rem' }}
+                      placeholder="Write the instruction content here (e.g. 'Write a Jest test suite for the following JS function:')"
+                      value={newTemplateText}
+                      onChange={(e) => setNewTemplateText(e.target.value)}
+                    />
+                  </div>
+                  <button className="btn-primary" style={{ width: '100%', background: 'var(--accent-orange)', color: 'black', fontWeight: 'bold', border: 'none' }} onClick={createTemplate}>
+                    Save to Prompt Library
+                  </button>
+                </div>
+
+                {/* Templates List */}
+                <div className="panel" style={{ display: 'flex', flexDirection: 'column', maxHeight: '550px', overflowY: 'auto' }}>
+                  <h3 className="card-title">📚 Saved Templates ({templatesList.length})</h3>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', flexGrow: 1 }}>
+                    {templatesList.length === 0 ? (
+                      <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)', textAlign: 'center', marginTop: '40px' }}>No templates saved. Create one on the left!</span>
+                    ) : (
+                      templatesList.map(t => (
+                        <div key={t.id} style={{
+                          background: 'rgba(255,255,255,0.02)',
+                          border: '1px solid var(--border-glass)',
+                          padding: '16px',
+                          borderRadius: 'var(--radius-md)',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '8px'
+                        }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <strong style={{ fontSize: '0.95rem', color: 'white' }}>{t.title}</strong>
+                            <button
+                              className="btn-primary"
+                              style={{ background: '#ef4444', border: 'none', padding: '4px 8px', fontSize: '0.75rem' }}
+                              onClick={() => deleteTemplate(t.id)}
+                            >
+                              Delete
+                            </button>
+                          </div>
+                          <pre style={{
+                            background: '#040711',
+                            padding: '12px',
+                            borderRadius: 'var(--radius-md)',
+                            border: '1px solid var(--border-glass)',
+                            whiteSpace: 'pre-wrap',
+                            fontFamily: 'var(--font-mono)',
+                            fontSize: '0.75rem',
+                            color: 'var(--text-secondary)',
+                            margin: 0,
+                            maxHeight: '100px',
+                            overflowY: 'auto'
+                          }}>
+                            {t.text}
+                          </pre>
+                          <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
+                            <button
+                              className="btn-primary"
+                              style={{ padding: '4px 10px', fontSize: '0.75rem', flexGrow: 1 }}
+                              onClick={() => {
+                                setInputMessage(t.text);
+                                setActiveTab('chat');
+                              }}
+                            >
+                              Use in Chat
+                            </button>
+                            <button
+                              className="btn-primary"
+                              style={{ padding: '4px 10px', fontSize: '0.75rem', flexGrow: 1, background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border-glass)' }}
+                              onClick={() => {
+                                setArenaPrompt(t.text);
+                                setActiveTab('arena');
+                              }}
+                            >
+                              Use in Arena
+                            </button>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
 
           {activeTab === 'arena' && (
             <div>

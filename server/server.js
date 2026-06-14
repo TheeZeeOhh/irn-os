@@ -314,6 +314,15 @@ app.post('/api/templates', (req, res) => {
   res.json({ success: true, templates: config.templates });
 });
 
+app.delete('/api/templates/:id', (req, res) => {
+  const config = readConfig();
+  if (config.templates) {
+    config.templates = config.templates.filter(t => t.id !== req.params.id);
+    writeConfig(config);
+  }
+  res.json({ success: true, templates: config.templates || [] });
+});
+
 // Helper to construct Google Auth
 function getGoogleAuth(googleConfig) {
   const { clientId, clientSecret, refreshToken } = googleConfig || {};
