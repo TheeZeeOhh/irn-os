@@ -42,17 +42,75 @@ app.post('/api/chat', async (req, res) => {
   const activeProvider = provider || config.settings.activeProvider;
   const activeModel = model || config.settings.defaultModel;
 
+  // Inject persistent memory into messages
+  let updatedMessages = [...messages];
+  const memories = config.memory || [
+    "User prefers TypeScript with strict typings and no 'any'.",
+    "User's name is Aziza Okoro (Zee) and has phone 410-680-2587.",
+    "User is autistic and prefers structured step-by-step explanations.",
+    "Keep responses playful, clever, and empathetic."
+  ];
+
+  if (memories.length > 0) {
+    const memoryContext = `[PERSISTENT USER PROFILE MEMORY - ADHERE TO THESE PREFERENCES AT ALL TIMES]:\n- ${memories.join('\n- ')}`;
+    const sysMsgIdx = updatedMessages.findIndex(m => m.role === 'system');
+    if (sysMsgIdx >= 0) {
+      updatedMessages[sysMsgIdx] = {
+        role: 'system',
+        content: updatedMessages[sysMsgIdx].content + '\n\n' + memoryContext
+      };
+    } else {
+      updatedMessages.unshift({
+        role: 'system',
+        content: memoryContext
+      });
+    }
+  }
+
   try {
     const result = await generateCompletion({
       provider: activeProvider,
       model: activeModel,
-      messages
+      messages: updatedMessages
     });
     res.json(result);
   } catch (err) {
     console.error('Chat generation error:', err);
     res.status(500).json({ error: err.message });
   }
+});
+
+// Memory profile endpoints
+app.get('/api/memory', (req, res) => {
+  const config = readConfig();
+  res.json(config.memory || [
+    "User prefers TypeScript with strict typings and no 'any'.",
+    "User's name is Aziza Okoro (Zee) and has phone 410-680-2587.",
+    "User is autistic and prefers structured step-by-step explanations.",
+    "Keep responses playful, clever, and empathetic."
+  ]);
+});
+
+app.post('/api/memory', (req, res) => {
+  const { fact } = req.body;
+  if (!fact) return res.status(400).json({ error: 'Fact is required' });
+  const config = readConfig();
+  if (!config.memory) config.memory = [];
+  config.memory.push(fact);
+  writeConfig(config);
+  res.json({ success: true, memory: config.memory });
+});
+
+app.delete('/api/memory/:index', (req, res) => {
+  const config = readConfig();
+  if (config.memory) {
+    const idx = parseInt(req.params.index);
+    if (!isNaN(idx) && idx >= 0 && idx < config.memory.length) {
+      config.memory.splice(idx, 1);
+      writeConfig(config);
+    }
+  }
+  res.json({ success: true, memory: config.memory || [] });
 });
 
 // Get available models

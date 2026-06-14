@@ -115,6 +115,8 @@ export default function App() {
   const [sessionCost, setSessionCost] = useState(0.00);
   const [sessionTokens, setSessionTokens] = useState(0);
   const [isListening, setIsListening] = useState(false);
+  const [memoryList, setMemoryList] = useState([]);
+  const [newMemoryFact, setNewMemoryFact] = useState('');
 
   const fetchHistories = async () => {
     try {
@@ -659,6 +661,48 @@ export default function App() {
     recognition.start();
   };
 
+  const fetchMemories = async () => {
+    try {
+      const res = await fetch('/api/memory');
+      const data = await res.json();
+      setMemoryList(data || []);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const addMemoryFact = async () => {
+    if (!newMemoryFact.trim()) return;
+    try {
+      const res = await fetch('/api/memory', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fact: newMemoryFact })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setMemoryList(data.memory);
+        setNewMemoryFact('');
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const deleteMemoryFact = async (index) => {
+    try {
+      const res = await fetch(`/api/memory/${index}`, {
+        method: 'DELETE'
+      });
+      const data = await res.json();
+      if (data.success) {
+        setMemoryList(data.memory);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   const fetchFileList = async () => {
     try {
       const res = await fetch('/api/files');
@@ -726,6 +770,7 @@ export default function App() {
     fetchBudget();
     fetchIntegrationConfig();
     fetchTemplates();
+    fetchMemories();
   }, []);
 
   const fetchTelemetry = async () => {
@@ -945,6 +990,9 @@ export default function App() {
             </a>
             <a className={`nav-item ${activeTab === 'templates' ? 'active' : ''}`} onClick={() => { setActiveTab('templates'); fetchTemplates(); }}>
               📋 Prompt Library
+            </a>
+            <a className={`nav-item ${activeTab === 'memory' ? 'active' : ''}`} onClick={() => { setActiveTab('memory'); fetchMemories(); }}>
+              🧠 Memory Profile
             </a>
             <a className={`nav-item ${activeTab === 'arena' ? 'active' : ''}`} onClick={() => setActiveTab('arena')}>
               ⚔️ Model Arena
@@ -1910,6 +1958,70 @@ model = get_peft_model(model, peft_config)
               </div>
             );
           })()}
+
+          {activeTab === 'memory' && (
+            <div>
+              <h2>🧠 Persistent Memory Profile</h2>
+              <p style={{ color: 'var(--text-secondary)', marginBottom: '24px' }}>
+                Store key developer preferences, project scopes, style guidelines, and facts about yourself. The active LLM automatically inherits this memory context for all chat completions.
+              </p>
+
+              <div className="grid-2">
+                {/* Add memory fact form */}
+                <div className="panel" style={{ borderLeft: '4px solid var(--accent-orange)' }}>
+                  <h3 className="card-title" style={{ color: 'var(--accent-orange)' }}>🧠 Remember New Fact</h3>
+                  <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '16px' }}>
+                    Type a preference, context detail, or instruction you want the AI to remember forever across all chat logs.
+                  </p>
+                  <div className="form-group">
+                    <label>Preference / Instruction Fact</label>
+                    <textarea
+                      className="form-control"
+                      style={{ height: '140px', fontFamily: 'var(--font-sans)', resize: 'vertical' }}
+                      placeholder="e.g. Always structure code responses with TypeScript interfaces."
+                      value={newMemoryFact}
+                      onChange={(e) => setNewMemoryFact(e.target.value)}
+                    />
+                  </div>
+                  <button className="btn-primary" style={{ width: '100%', background: 'var(--accent-orange)', border: 'none', color: 'black', fontWeight: 'bold' }} onClick={addMemoryFact}>
+                    Add Memory Fact
+                  </button>
+                </div>
+
+                {/* Memories List */}
+                <div className="panel" style={{ display: 'flex', flexDirection: 'column', maxHeight: '550px', overflowY: 'auto' }}>
+                  <h3 className="card-title">📖 Active Memory Contexts ({memoryList.length})</h3>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    {memoryList.length === 0 ? (
+                      <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)', textAlign: 'center', marginTop: '40px' }}>No memories saved yet.</span>
+                    ) : (
+                      memoryList.map((fact, index) => (
+                        <div key={index} style={{
+                          background: 'rgba(255,255,255,0.02)',
+                          border: '1px solid var(--border-glass)',
+                          padding: '12px 16px',
+                          borderRadius: 'var(--radius-md)',
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          gap: '12px'
+                        }}>
+                          <span style={{ fontSize: '0.85rem', color: '#e2e8f0', lineHeight: '1.4' }}>{fact}</span>
+                          <button
+                            className="btn-primary"
+                            style={{ background: '#ef4444', border: 'none', padding: '4px 8px', fontSize: '0.75rem', flexShrink: 0 }}
+                            onClick={() => deleteMemoryFact(index)}
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
 
           {activeTab === 'templates' && (
             <div>
