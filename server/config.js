@@ -27,6 +27,11 @@ const defaultConfig = {
     theme: 'dark',
     port: 4567
   },
+  templates: [
+    { id: 't1', title: '🔍 Code Explainer', text: 'Explain the following code step-by-step, highlighting performance optimization opportunities:\n\n' },
+    { id: 't2', title: '🛡️ Bug Finder', text: 'Identify potential race conditions, edge-cases, memory leaks, or security vulnerabilities in this code:\n\n' },
+    { id: 't3', title: '📝 Docstring & Typings', text: 'Generate detailed JSDoc/docstrings and strict typings for the following code snippet:\n\n' }
+  ],
   usage: {} // tracks dates, tokens, and counts
 };
 

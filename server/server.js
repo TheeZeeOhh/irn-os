@@ -268,6 +268,52 @@ app.post('/api/budget', (req, res) => {
   res.json({ success: true, budget: config.budget });
 });
 
+// Git Diff & Commit Endpoints
+app.get('/api/git/diff', (req, res) => {
+  exec('git diff', (error, stdout, stderr) => {
+    // Note: git diff exits with 1 if there are differences, so don't fail on that
+    res.json({ success: true, diff: stdout || 'No unstaged changes.' });
+  });
+});
+
+app.post('/api/git/commit', (req, res) => {
+  const { message } = req.body;
+  if (!message) {
+    return res.status(400).json({ error: 'Commit message is required' });
+  }
+  const escapedMessage = message.replace(/"/g, '\\"');
+  exec(`git add . && git commit -m "${escapedMessage}"`, (error, stdout, stderr) => {
+    if (error) {
+      return res.status(500).json({ error: error.message, stdout, stderr });
+    }
+    res.json({ success: true, stdout, stderr });
+  });
+});
+
+// Prompt templates endpoints
+app.get('/api/templates', (req, res) => {
+  const config = readConfig();
+  res.json(config.templates || []);
+});
+
+app.post('/api/templates', (req, res) => {
+  const { template } = req.body;
+  if (!template || !template.title || !template.text) {
+    return res.status(400).json({ error: 'Invalid template structure' });
+  }
+  const config = readConfig();
+  if (!config.templates) config.templates = [];
+  
+  const newTemplate = {
+    id: `template-${Date.now()}`,
+    title: template.title,
+    text: template.text
+  };
+  config.templates.push(newTemplate);
+  writeConfig(config);
+  res.json({ success: true, templates: config.templates });
+});
+
 // Helper to construct Google Auth
 function getGoogleAuth(googleConfig) {
   const { clientId, clientSecret, refreshToken } = googleConfig || {};

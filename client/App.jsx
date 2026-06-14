@@ -88,6 +88,34 @@ export default function App() {
   const [notionPageId, setNotionPageId] = useState('');
   const [notionAppendContent, setNotionAppendContent] = useState('');
 
+  // Prompt Templates states
+  const [templatesList, setTemplatesList] = useState([]);
+  const [newTemplateTitle, setNewTemplateTitle] = useState('');
+  const [newTemplateText, setNewTemplateText] = useState('');
+
+  // Model Arena states
+  const [arenaPrompt, setArenaPrompt] = useState('');
+  const [arenaModelA, setArenaModelA] = useState('gemini-2.5-flash');
+  const [arenaModelB, setArenaModelB] = useState('claude-3-5-sonnet-20240620');
+  const [arenaResponseA, setArenaResponseA] = useState('');
+  const [arenaResponseB, setArenaResponseB] = useState('');
+  const [arenaLoadingA, setArenaLoadingA] = useState(false);
+  const [arenaLoadingB, setArenaLoadingB] = useState(false);
+  const [arenaLatencyA, setArenaLatencyA] = useState(0);
+  const [arenaLatencyB, setArenaLatencyB] = useState(0);
+
+  // Git Workspace states
+  const [gitDiff, setGitDiff] = useState('');
+  const [gitCommitMessage, setGitCommitMessage] = useState('');
+  const [gitLoadingDiff, setGitLoadingDiff] = useState(false);
+  const [gitLoadingCommit, setGitLoadingCommit] = useState(false);
+  const [gitExplainingDiff, setGitExplainingDiff] = useState(false);
+
+  // Cost and Voice states
+  const [sessionCost, setSessionCost] = useState(0.00);
+  const [sessionTokens, setSessionTokens] = useState(0);
+  const [isListening, setIsListening] = useState(false);
+
   const fetchHistories = async () => {
     try {
       const res = await fetch('/api/history');
@@ -384,6 +412,239 @@ export default function App() {
     }
   };
 
+  // Advanced feature functions
+  const fetchTemplates = async () => {
+    try {
+      const res = await fetch('/api/templates');
+      const data = await res.json();
+      setTemplatesList(data || []);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const createTemplate = async () => {
+    if (!newTemplateTitle.trim() || !newTemplateText.trim()) {
+      alert('Title and Text are required.');
+      return;
+    }
+    try {
+      const res = await fetch('/api/templates', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ template: { title: newTemplateTitle, text: newTemplateText } })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setTemplatesList(data.templates);
+        setNewTemplateTitle('');
+        setNewTemplateText('');
+        alert('Prompt template saved to library!');
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const getProviderForModel = (modelName) => {
+    if (modelName.includes('gemini')) return 'gemini';
+    if (modelName.includes('claude') || modelName.includes('sonnet') || modelName.includes('opus')) return 'anthropic';
+    if (modelName.includes('gpt')) return 'openai';
+    return 'ollama';
+  };
+
+  const updateCostMetrics = (providerName, modelName, inputTxt, outputTxt) => {
+    const inputTokens = Math.ceil(inputTxt.length / 4);
+    const outputTokens = Math.ceil(outputTxt.length / 4);
+    const totalTokens = inputTokens + outputTokens;
+    setSessionTokens(prev => prev + totalTokens);
+    
+    let rateInput = 0.05 / 1000000;
+    let rateOutput = 0.15 / 1000000;
+    
+    if (modelName.includes('flash')) {
+      rateInput = 0.075 / 1000000;
+      rateOutput = 0.30 / 1000000;
+    } else if (modelName.includes('pro')) {
+      rateInput = 1.25 / 1000000;
+      rateOutput = 5.00 / 1000000;
+    } else if (modelName.includes('sonnet')) {
+      rateInput = 3.00 / 1000000;
+      rateOutput = 15.00 / 1000000;
+    } else if (modelName.includes('gpt-4o')) {
+      rateInput = 5.00 / 1000000;
+      rateOutput = 15.00 / 1000000;
+    }
+    
+    const cost = (inputTokens * rateInput) + (outputTokens * rateOutput);
+    setSessionCost(prev => Number((prev + cost).toFixed(5)));
+  };
+
+  const runModelArena = async () => {
+    if (!arenaPrompt.trim()) return;
+    setArenaResponseA('');
+    setArenaResponseB('');
+    setArenaLoadingA(true);
+    setArenaLoadingB(true);
+    
+    const startTimeA = Date.now();
+    const startTimeB = Date.now();
+    
+    const fetchModelA = async () => {
+      try {
+        const res = await fetch('/api/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            provider: getProviderForModel(arenaModelA),
+            model: arenaModelA,
+            messages: [{ role: 'user', content: arenaPrompt }]
+          })
+        });
+        const data = await res.json();
+        setArenaResponseA(data.text || 'No response.');
+        setArenaLatencyA(Date.now() - startTimeA);
+        updateCostMetrics(getProviderForModel(arenaModelA), arenaModelA, arenaPrompt, data.text || '');
+      } catch (err) {
+        setArenaResponseA(`Error: ${err.message}`);
+      } finally {
+        setArenaLoadingA(false);
+      }
+    };
+
+    const fetchModelB = async () => {
+      try {
+        const res = await fetch('/api/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            provider: getProviderForModel(arenaModelB),
+            model: arenaModelB,
+            messages: [{ role: 'user', content: arenaPrompt }]
+          })
+        });
+        const data = await res.json();
+        setArenaResponseB(data.text || 'No response.');
+        setArenaLatencyB(Date.now() - startTimeB);
+        updateCostMetrics(getProviderForModel(arenaModelB), arenaModelB, arenaPrompt, data.text || '');
+      } catch (err) {
+        setArenaResponseB(`Error: ${err.message}`);
+      } finally {
+        setArenaLoadingB(false);
+      }
+    };
+
+    Promise.all([fetchModelA(), fetchModelB()]);
+  };
+
+  const fetchGitDiff = async () => {
+    setGitLoadingDiff(true);
+    try {
+      const res = await fetch('/api/git/diff');
+      const data = await res.json();
+      setGitDiff(data.diff || 'No unstaged changes.');
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setGitLoadingDiff(false);
+    }
+  };
+
+  const explainGitDiff = async () => {
+    if (!gitDiff || gitDiff === 'No unstaged changes.') {
+      alert('No diff content to explain.');
+      return;
+    }
+    setGitExplainingDiff(true);
+    try {
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          provider: selectedProvider,
+          model: selectedModel,
+          messages: [
+            { role: 'system', content: 'You are a git commit assistant. Summarize the following git diff in a single short line under 50 characters, and output ONLY that line. Do not write markdown, code blocks, or explanations.' },
+            { role: 'user', content: gitDiff }
+          ]
+        })
+      });
+      const data = await res.json();
+      if (data.text) {
+        setGitCommitMessage(data.text.trim());
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setGitExplainingDiff(false);
+    }
+  };
+
+  const commitGitChanges = async () => {
+    if (!gitCommitMessage.trim()) {
+      alert('Commit message is required.');
+      return;
+    }
+    setGitLoadingCommit(true);
+    try {
+      const res = await fetch('/api/git/commit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: gitCommitMessage })
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert('🐙 Changes committed successfully!');
+        setGitCommitMessage('');
+        fetchGitDiff();
+      } else {
+        alert(`Commit failed: ${data.error}`);
+      }
+    } catch (err) {
+      alert(`Commit error: ${err.message}`);
+    } finally {
+      setGitLoadingCommit(false);
+    }
+  };
+
+  const toggleSpeechRecognition = (targetSetter) => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      alert('Speech recognition is not supported in this browser. Try Chrome/Safari!');
+      return;
+    }
+
+    if (isListening) {
+      setIsListening(false);
+      return;
+    }
+
+    const recognition = new SpeechRecognition();
+    recognition.continuous = false;
+    recognition.lang = 'en-US';
+    recognition.interimResults = false;
+
+    recognition.onstart = () => {
+      setIsListening(true);
+    };
+
+    recognition.onresult = (event) => {
+      const transcript = event.results[0][0].transcript;
+      targetSetter(prev => prev + (prev ? ' ' : '') + transcript);
+    };
+
+    recognition.onerror = (err) => {
+      console.error('Speech Recognition Error:', err);
+      setIsListening(false);
+    };
+
+    recognition.onend = () => {
+      setIsListening(false);
+    };
+
+    recognition.start();
+  };
+
   const fetchFileList = async () => {
     try {
       const res = await fetch('/api/files');
@@ -450,6 +711,7 @@ export default function App() {
     fetchPresets();
     fetchBudget();
     fetchIntegrationConfig();
+    fetchTemplates();
   }, []);
 
   const fetchTelemetry = async () => {
@@ -566,6 +828,7 @@ export default function App() {
         const tokensGenerated = Math.ceil(data.text.length / 4);
         setSessionTotalTokens(prev => prev + tokensGenerated);
         setSessionTokensPerSecond(prev => [...prev, tokensGenerated / (durationSec || 0.1)]);
+        updateCostMetrics(selectedProvider, selectedModel, promptText, data.text || '');
       } else {
         setChatMessages(prev => [...prev, { role: 'assistant', content: `Error: ${data.error}` }]);
       }
@@ -666,6 +929,12 @@ export default function App() {
             <a className={`nav-item ${activeTab === 'chat' ? 'active' : ''}`} onClick={() => setActiveTab('chat')}>
               💬 Interactive Chat
             </a>
+            <a className={`nav-item ${activeTab === 'arena' ? 'active' : ''}`} onClick={() => setActiveTab('arena')}>
+              ⚔️ Model Arena
+            </a>
+            <a className={`nav-item ${activeTab === 'git' ? 'active' : ''}`} onClick={() => { setActiveTab('git'); fetchGitDiff(); }}>
+              🐙 Git Workspace
+            </a>
             <a className={`nav-item ${activeTab === 'keys' ? 'active' : ''}`} onClick={() => setActiveTab('keys')}>
               🔑 API Key Manager
             </a>
@@ -701,9 +970,17 @@ export default function App() {
             <span style={{ color: 'var(--text-secondary)' }}>Selected Model: </span>
             <strong style={{ color: 'var(--accent-cyan)' }}>{config.settings.activeProvider} ({config.settings.defaultModel})</strong>
           </div>
-          <div className="status-badge">
-            <span className="status-dot"></span>
-            Online & Ready
+          <div style={{ display: 'flex', gap: '20px', alignItems: 'center' }}>
+            <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border-glass)', padding: '6px 12px', borderRadius: 'var(--radius-md)', fontSize: '0.8rem' }}>
+              💰 Session Cost: <strong style={{ color: '#10b981' }}>${sessionCost.toFixed(5)}</strong>
+            </div>
+            <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border-glass)', padding: '6px 12px', borderRadius: 'var(--radius-md)', fontSize: '0.8rem' }}>
+              🔤 Session Tokens: <strong style={{ color: 'var(--accent-cyan)' }}>{sessionTokens.toLocaleString()}</strong>
+            </div>
+            <div className="status-badge">
+              <span className="status-dot"></span>
+              Online & Ready
+            </div>
           </div>
         </div>
 
@@ -792,16 +1069,79 @@ export default function App() {
                 <div ref={messagesEndRef} />
               </div>
 
-              <div className="chat-input-area">
-                <input
-                  type="text"
-                  className="chat-input"
-                  placeholder="Ask a question or request a code snippet..."
-                  value={inputMessage}
-                  onChange={(e) => setInputMessage(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
-                />
-                <button className="send-btn" onClick={handleSendMessage}>Send</button>
+              <div style={{ background: 'rgba(255,255,255,0.02)', padding: '12px', borderTop: '1px solid var(--border-glass)' }}>
+                {/* Template Library Quick Selector */}
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '8px' }}>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>📋 Prompt Library:</span>
+                  <select
+                    className="form-control"
+                    style={{ width: '200px', padding: '4px 8px', fontSize: '0.75rem', height: 'auto' }}
+                    onChange={(e) => {
+                      const t = templatesList.find(x => x.id === e.target.value);
+                      if (t) setInputMessage(prev => t.text + prev);
+                      e.target.value = "";
+                    }}
+                    defaultValue=""
+                  >
+                    <option value="" disabled>Select a prompt template...</option>
+                    {templatesList.map(t => (
+                      <option key={t.id} value={t.id}>{t.title}</option>
+                    ))}
+                  </select>
+
+                  {/* Add Quick Template inline button */}
+                  <button
+                    className="btn-primary"
+                    style={{ padding: '2px 8px', fontSize: '0.7rem' }}
+                    onClick={() => {
+                      const title = prompt('Template Title:');
+                      const text = prompt('Template prompt content:');
+                      if (title && text) {
+                        fetch('/api/templates', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ template: { title, text } })
+                        })
+                        .then(r => r.json())
+                        .then(d => { if (d.success) setTemplatesList(d.templates); });
+                      }
+                    }}
+                  >
+                    + Add Template
+                  </button>
+                </div>
+
+                <div className="chat-input-area" style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                  <button
+                    onClick={() => toggleSpeechRecognition(setInputMessage)}
+                    style={{
+                      background: isListening ? '#ef4444' : 'rgba(255,255,255,0.05)',
+                      border: '1px solid var(--border-glass)',
+                      borderRadius: 'var(--radius-md)',
+                      cursor: 'pointer',
+                      padding: '10px 14px',
+                      fontSize: '1rem',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: 'white',
+                      transition: 'all 0.2s'
+                    }}
+                    title="Toggle Voice Input (Speech-to-Text)"
+                  >
+                    {isListening ? '🛑 Rec' : '🎤 Mic'}
+                  </button>
+                  <input
+                    type="text"
+                    className="chat-input"
+                    style={{ flexGrow: 1 }}
+                    placeholder="Ask a question, request a code snippet, or speak to voice assistant..."
+                    value={inputMessage}
+                    onChange={(e) => setInputMessage(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
+                  />
+                  <button className="send-btn" onClick={handleSendMessage}>Send</button>
+                </div>
               </div>
             </div>
           </div>
@@ -1553,6 +1893,182 @@ model = get_peft_model(model, peft_config)
               </div>
             );
           })()}
+
+          {activeTab === 'arena' && (
+            <div>
+              <h2>⚔️ Model Arena & Parallel Generation</h2>
+              <p style={{ color: 'var(--text-secondary)', marginBottom: '24px' }}>
+                Query multiple large language models concurrently to compare their outputs, latencies, and generation speeds side-by-side.
+              </p>
+
+              <div className="panel" style={{ marginBottom: '24px' }}>
+                <h3 className="card-title">📝 Arena Setup</h3>
+                <div style={{ display: 'flex', gap: '20px', marginBottom: '16px' }}>
+                  <div style={{ flexGrow: 1 }}>
+                    <label style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Model A</label>
+                    <select className="form-control" value={arenaModelA} onChange={e => setArenaModelA(e.target.value)}>
+                      <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
+                      <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
+                      <option value="claude-3-5-sonnet-20240620">Claude 3.5 Sonnet</option>
+                      <option value="gpt-4o">GPT-4o</option>
+                    </select>
+                  </div>
+                  <div style={{ flexGrow: 1 }}>
+                    <label style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Model B</label>
+                    <select className="form-control" value={arenaModelB} onChange={e => setArenaModelB(e.target.value)}>
+                      <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
+                      <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
+                      <option value="claude-3-5-sonnet-20240620">Claude 3.5 Sonnet</option>
+                      <option value="gpt-4o">GPT-4o</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="chat-input-area" style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                  <button
+                    onClick={() => toggleSpeechRecognition(setArenaPrompt)}
+                    style={{
+                      background: isListening ? '#ef4444' : 'rgba(255,255,255,0.05)',
+                      border: '1px solid var(--border-glass)',
+                      borderRadius: 'var(--radius-md)',
+                      cursor: 'pointer',
+                      padding: '10px 14px',
+                      fontSize: '1rem',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: 'white'
+                    }}
+                    title="Toggle Voice Input (Speech-to-Text)"
+                  >
+                    {isListening ? '🛑 Rec' : '🎤 Mic'}
+                  </button>
+                  <input
+                    type="text"
+                    className="chat-input"
+                    style={{ flexGrow: 1 }}
+                    placeholder="Enter comparison prompt or speak it here..."
+                    value={arenaPrompt}
+                    onChange={e => setArenaPrompt(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && runModelArena()}
+                  />
+                  <button className="send-btn" onClick={runModelArena}>Battle</button>
+                </div>
+              </div>
+
+              <div className="grid-2">
+                {/* Model A Results */}
+                <div className="panel" style={{ borderTop: '4px solid var(--accent-cyan)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px' }}>
+                    <h3 className="card-title" style={{ margin: 0 }}>🤖 {arenaModelA}</h3>
+                    {arenaLatencyA > 0 && <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>⏱️ {arenaLatencyA}ms</span>}
+                  </div>
+                  <div style={{
+                    minHeight: '200px',
+                    background: 'rgba(0,0,0,0.2)',
+                    padding: '16px',
+                    borderRadius: 'var(--radius-md)',
+                    border: '1px solid var(--border-glass)',
+                    whiteSpace: 'pre-wrap',
+                    fontFamily: 'var(--font-sans)',
+                    fontSize: '0.9rem'
+                  }}>
+                    {arenaLoadingA ? <div className="pulse">Generating response...</div> : arenaResponseA || "Awaiting battle..."}
+                  </div>
+                </div>
+
+                {/* Model B Results */}
+                <div className="panel" style={{ borderTop: '4px solid var(--accent-purple)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px' }}>
+                    <h3 className="card-title" style={{ margin: 0 }}>🤖 {arenaModelB}</h3>
+                    {arenaLatencyB > 0 && <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>⏱️ {arenaLatencyB}ms</span>}
+                  </div>
+                  <div style={{
+                    minHeight: '200px',
+                    background: 'rgba(0,0,0,0.2)',
+                    padding: '16px',
+                    borderRadius: 'var(--radius-md)',
+                    border: '1px solid var(--border-glass)',
+                    whiteSpace: 'pre-wrap',
+                    fontFamily: 'var(--font-sans)',
+                    fontSize: '0.9rem'
+                  }}>
+                    {arenaLoadingB ? <div className="pulse">Generating response...</div> : arenaResponseB || "Awaiting battle..."}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'git' && (
+            <div>
+              <h2>🐙 Git Workspace & Commit Explainer</h2>
+              <p style={{ color: 'var(--text-secondary)', marginBottom: '24px' }}>
+                Inspect your local repository changes, get AI explanations of the diff, and commit updates directly.
+              </p>
+
+              <div className="grid-2">
+                {/* Diff Viewer */}
+                <div className="panel" style={{ display: 'flex', flexDirection: 'column', height: '500px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                    <h3 className="card-title" style={{ margin: 0 }}>🔍 Unstaged Changes</h3>
+                    <button className="btn-primary" style={{ padding: '4px 10px', fontSize: '0.75rem' }} onClick={fetchGitDiff}>Refresh Diff</button>
+                  </div>
+                  <pre style={{
+                    flexGrow: 1,
+                    background: '#040711',
+                    padding: '16px',
+                    borderRadius: 'var(--radius-md)',
+                    border: '1px solid var(--border-glass)',
+                    overflow: 'auto',
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: '0.8rem',
+                    color: '#e2e8f0',
+                    margin: 0
+                  }}>
+                    {gitLoadingDiff ? 'Loading repository differences...' : gitDiff}
+                  </pre>
+                </div>
+
+                {/* Commit Console */}
+                <div className="panel" style={{ borderLeft: '4px solid var(--accent-orange)' }}>
+                  <h3 className="card-title" style={{ color: 'var(--accent-orange)' }}>🚀 Git Commit Assistant</h3>
+                  <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '20px' }}>
+                    Click the button below to have the AI analyze the diff and generate a clean commit message.
+                  </p>
+
+                  <button
+                    className="btn-primary"
+                    style={{ width: '100%', marginBottom: '20px' }}
+                    onClick={explainGitDiff}
+                    disabled={gitExplainingDiff || gitLoadingDiff || !gitDiff || gitDiff === 'No unstaged changes.'}
+                  >
+                    {gitExplainingDiff ? 'Analyzing diff content...' : '📝 Auto-Generate Commit Message'}
+                  </button>
+
+                  <div className="form-group">
+                    <label>Commit Message</label>
+                    <input
+                      type="text"
+                      className="form-control"
+                      placeholder="Commit message (e.g. feat: complete workspace integrations)"
+                      value={gitCommitMessage}
+                      onChange={e => setGitCommitMessage(e.target.value)}
+                    />
+                  </div>
+
+                  <button
+                    className="btn-primary"
+                    style={{ width: '100%', background: 'var(--accent-orange)', border: 'none', color: 'black', fontWeight: 'bold' }}
+                    onClick={commitGitChanges}
+                    disabled={gitLoadingCommit || !gitCommitMessage.trim()}
+                  >
+                    {gitLoadingCommit ? 'Committing changes...' : '🐙 Stage All & Commit Changes'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
 
           {activeTab === 'files' && (
             <div className="panel">
