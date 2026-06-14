@@ -2,6 +2,8 @@
 
 A premium, secure local AI platform designed for multi-provider LLM balancing, telemetry calculations, and secure file integrations. Created for **Zee (Aziza Okoro)**.
 
+![IRN-OS Dashboard](assets/irn-os_screenshot.jpg)
+
 ---
 
 ## 🚀 Installation & Setup
