@@ -8,6 +8,7 @@ import { Client as NotionClient } from '@notionhq/client';
 import { readConfig, writeConfig, saveChatHistory, getChatHistory, listChatHistories, deleteChatHistory } from './config.js';
 import { generateCompletion } from './providers.js';
 import { uploadFileToSupabase, listSupabaseFiles } from './supabase.js';
+import * as mathUtils from './math.js';
 
 const upload = multer({ storage: multer.memoryStorage() });
 
@@ -381,6 +382,41 @@ app.delete('/api/templates/:id', (req, res) => {
     writeConfig(config);
   }
   res.json({ success: true, templates: config.templates || [] });
+});
+
+// Mathematical constants & calculations endpoint
+app.get('/api/math/constants', (req, res) => {
+  res.json({
+    TAU: mathUtils.TAU,
+    PI: mathUtils.PI,
+    E: mathUtils.E,
+    PHI: mathUtils.PHI
+  });
+});
+
+app.post('/api/math/calculate', (req, res) => {
+  const { action, value } = req.body;
+  const num = parseFloat(value);
+  if (isNaN(num) && action !== 'euler') {
+    return res.status(400).json({ error: 'A valid number is required' });
+  }
+
+  try {
+    if (action === 'circumference') {
+      return res.json({ success: true, result: mathUtils.getCircumference(num), formula: `C = \u03c4 * r` });
+    }
+    if (action === 'area') {
+      return res.json({ success: true, result: mathUtils.getArea(num), formula: `A = (\u03c4 * r^2) / 2` });
+    }
+    if (action === 'euler') {
+      const k = isNaN(num) ? 1 : num;
+      const result = mathUtils.verifyEulerIdentity(k);
+      return res.json({ success: true, result: result.formatted, formula: `e^(i * k * \u03c4) = 1` });
+    }
+    return res.status(400).json({ error: 'Invalid math action' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Helper to construct Google Auth

@@ -1656,6 +1656,70 @@ export default function App() {
                   </div>
                 </div>
 
+                <h2 style={{ marginTop: '40px' }}>🔢 Circular & Trigonometric Solver (Powered by Tau)</h2>
+                <p style={{ color: 'var(--text-secondary)', marginBottom: '24px' }}>
+                  Verify high-precision circular dimensions and Euler's identities computed directly on the backend using &tau; constants.
+                </p>
+
+                <div className="panel" style={{ borderLeft: '4px solid var(--accent-orange)', marginBottom: '40px' }}>
+                  <h3 className="card-title" style={{ color: 'var(--accent-orange)' }}>📐 Precision Solver</h3>
+                  <div style={{ display: 'flex', gap: '16px', marginBottom: '16px' }}>
+                    <div style={{ flexGrow: 1 }}>
+                      <label style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Calculation Type</label>
+                      <select className="form-control" id="math-action" defaultValue="circumference">
+                        <option value="circumference">Circumference (C = &tau; * r)</option>
+                        <option value="area">Area (A = (&tau; * r^2) / 2)</option>
+                        <option value="euler">Euler's Identity verification (e^(i * k * &tau;) = 1)</option>
+                      </select>
+                    </div>
+                    <div style={{ flexGrow: 1 }}>
+                      <label style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Input Value (radius r or factor k)</label>
+                      <input
+                        type="number"
+                        className="form-control"
+                        id="math-value"
+                        placeholder="e.g. 5"
+                        defaultValue="1"
+                      />
+                    </div>
+                  </div>
+                  <button
+                    className="btn-primary"
+                    onClick={() => {
+                      const action = document.getElementById('math-action').value;
+                      const value = document.getElementById('math-value').value;
+                      fetch('/api/math/calculate', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ action, value })
+                      })
+                      .then(r => r.json())
+                      .then(d => {
+                        if (d.success) {
+                          document.getElementById('math-result').innerText = `Result: ${d.result}\nFormula: ${d.formula}`;
+                        } else {
+                          document.getElementById('math-result').innerText = `Error: ${d.error}`;
+                        }
+                      });
+                    }}
+                  >
+                    Solve Formula
+                  </button>
+
+                  <pre id="math-result" style={{
+                    marginTop: '16px',
+                    background: '#040711',
+                    padding: '12px',
+                    borderRadius: 'var(--radius-md)',
+                    border: '1px solid var(--border-glass)',
+                    fontFamily: 'var(--font-mono)',
+                    color: '#10b981',
+                    fontSize: '0.85rem'
+                  }}>
+                    Awaiting solve request...
+                  </pre>
+                </div>
+
                 <h2 style={{ marginTop: '40px' }}>🌐 Deep Architectural Telemetry (Gemini & Claude Models)</h2>
                 <p style={{ color: 'var(--text-secondary)', marginBottom: '24px' }}>
                   Mathematical representations of the underlying routing, caching, and alignment mechanisms.
