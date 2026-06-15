@@ -48,7 +48,8 @@ app.post('/api/chat', async (req, res) => {
     "User prefers TypeScript with strict typings and no 'any'.",
     "User's name is Aziza Okoro (Zee) and has phone 410-680-2587.",
     "User is autistic and prefers structured step-by-step explanations.",
-    "Keep responses playful, clever, and empathetic."
+    "Keep responses playful, clever, and empathetic.",
+    "Tau (\u03c4) is strictly defined as C/r = 2\u03c0 \u2248 6.283185307179586. Euler's identity is e^(i\u03c4) = 1."
   ];
 
   if (memories.length > 0) {
@@ -87,7 +88,8 @@ app.get('/api/memory', (req, res) => {
     "User prefers TypeScript with strict typings and no 'any'.",
     "User's name is Aziza Okoro (Zee) and has phone 410-680-2587.",
     "User is autistic and prefers structured step-by-step explanations.",
-    "Keep responses playful, clever, and empathetic."
+    "Keep responses playful, clever, and empathetic.",
+    "Tau (\u03c4) is strictly defined as C/r = 2\u03c0 \u2248 6.283185307179586. Euler's identity is e^(i\u03c4) = 1."
   ]);
 });
 
