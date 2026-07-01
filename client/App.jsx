@@ -259,6 +259,121 @@ export default function App() {
     setLikedTracks(prev => ({ ...prev, [idx]: !prev[idx] }));
   };
 
+  // AI Co-Pilot States
+  const [copilotDesc, setCopilotDesc] = useState('');
+  const [copilotSig, setCopilotSig] = useState('(id: string, roles: string[]) => Promise<unknown>');
+  const [copilotStrict, setCopilotStrict] = useState(true);
+  const [copilotGeneratedCode, setCopilotGeneratedCode] = useState('');
+  const [copilotCompiles, setCopilotCompiles] = useState(null);
+  const [copilotCompileLogs, setCopilotCompileLogs] = useState('');
+  const [copilotLoading, setCopilotLoading] = useState(false);
+  const [copilotSelectedFile, setCopilotSelectedFile] = useState('');
+  const [copilotCodeToAnalyze, setCopilotCodeToAnalyze] = useState('');
+  const [copilotAnalysisFindings, setCopilotAnalysisFindings] = useState([]);
+  const [copilotAnalyzing, setCopilotAnalyzing] = useState(false);
+  const [copilotMemoryQuery, setCopilotMemoryQuery] = useState('');
+  const [copilotMemoryResults, setCopilotMemoryResults] = useState([]);
+  const [copilotSearchingMemory, setCopilotSearchingMemory] = useState(false);
+  const [copilotFileList, setCopilotFileList] = useState([]);
+
+  const handleGenerateCode = async () => {
+    setCopilotLoading(true);
+    setCopilotCompiles(null);
+    setCopilotCompileLogs('');
+    try {
+      const res = await fetch('/api/copilot/generate-code', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          description: copilotDesc,
+          signature: copilotSig,
+          strictSettings: copilotStrict,
+          provider: config?.settings?.activeProvider,
+          model: config?.settings?.defaultModel
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setCopilotGeneratedCode(data.code);
+        setCopilotCompiles(data.compiles);
+        setCopilotCompileLogs(data.compileLogs);
+      }
+    } catch (err) {
+      console.error(err);
+      setCopilotCompileLogs('Error generating code: ' + err.message);
+    } finally {
+      setCopilotLoading(false);
+    }
+  };
+
+  const handleAnalyzeCode = async () => {
+    setCopilotAnalyzing(true);
+    setCopilotAnalysisFindings([]);
+    try {
+      const res = await fetch('/api/copilot/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          code: copilotCodeToAnalyze,
+          provider: config?.settings?.activeProvider,
+          model: config?.settings?.defaultModel
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setCopilotAnalysisFindings(data.findings);
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setCopilotAnalyzing(false);
+    }
+  };
+
+  const handleSearchMemory = async () => {
+    setCopilotSearchingMemory(true);
+    try {
+      const res = await fetch('/api/memory/search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: copilotMemoryQuery })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setCopilotMemoryResults(data.results || []);
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setCopilotSearchingMemory(false);
+    }
+  };
+
+  const handleLoadFileToAnalyze = async (filePath) => {
+    setCopilotSelectedFile(filePath);
+    try {
+      const res = await fetch(`/api/copilot/read-file?filePath=${encodeURIComponent(filePath)}`);
+      const data = await res.json();
+      if (data.success) {
+        setCopilotCodeToAnalyze(data.content);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const fetchCopilotFileList = async () => {
+    try {
+      const res = await fetch('/api/copilot/list-files');
+      const data = await res.json();
+      if (data.success) {
+        setCopilotFileList(data.files || []);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   const [compressionMode, setCompressionMode] = useState('code'); // 'code' or 'text'
   const [compressorOpen, setCompressorOpen] = useState(false);
   const [gatingEnabled, setGatingEnabled] = useState(false);
@@ -1458,6 +1573,9 @@ Follow the Aziza Code:
             </a>
             <a className={`nav-item ${activeTab === 'outreach' ? 'active' : ''}`} onClick={() => setActiveTab('outreach')}>
               📣 Media & Audience
+            </a>
+            <a className={`nav-item ${activeTab === 'copilot' ? 'active' : ''}`} onClick={() => { setActiveTab('copilot'); fetchCopilotFileList(); fetchMemories(); }}>
+              🛠️ AI Co-Pilot
             </a>
           </div>
         </div>
@@ -4362,6 +4480,278 @@ model = get_peft_model(model, peft_config)
                     </div>
 
                   </div>
+                </div>
+
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'copilot' && (
+            <div className="tab-panel slide-up">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+                <div>
+                  <h2 className="tab-title" style={{ fontSize: '1.75rem', fontWeight: '800', background: 'linear-gradient(135deg, #fff, var(--accent-cyan))', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', margin: 0 }}>
+                    🛠️ AI Co-Pilot & Code Auditor
+                  </h2>
+                  <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginTop: '4px' }}>
+                    Type-safe code generation, automated strict mode linting, and semantic memory recall.
+                  </p>
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px', height: 'calc(100vh - 240px)', overflowY: 'auto', paddingRight: '6px' }}>
+                
+                {/* Left Column: Co-Coder & Memory */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+                  
+                  {/* Co-Coder Card */}
+                  <div className="panel" style={{ borderLeft: '4px solid var(--accent-cyan)', background: 'var(--bg-card)', padding: '24px', borderRadius: 'var(--radius-lg)' }}>
+                    <h3 className="card-title" style={{ color: 'var(--accent-cyan)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      🧙♀️ Type-Safe Co-Coder
+                    </h3>
+                    <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '16px' }}>
+                      Describe a function and define its strict TypeScript signature. The compiler will validate the code output in real-time.
+                    </p>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                      <div>
+                        <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>Function Signature</label>
+                        <input 
+                          type="text" 
+                          className="form-control"
+                          value={copilotSig}
+                          onChange={(e) => setCopilotSig(e.target.value)}
+                          placeholder="e.g. (id: string, roles: string[]) => Promise<User>"
+                          style={{ width: '100%' }}
+                        />
+                      </div>
+
+                      <div>
+                        <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>Function Description</label>
+                        <textarea 
+                          rows="3" 
+                          className="form-control"
+                          value={copilotDesc}
+                          onChange={(e) => setCopilotDesc(e.target.value)}
+                          placeholder="Describe what the function does (e.g. Fetches user data from DB, filters by roles, and logs telemetry)"
+                          style={{ width: '100%', resize: 'none' }}
+                        />
+                      </div>
+
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(255,255,255,0.02)', padding: '10px 14px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-glass)' }}>
+                        <span style={{ fontSize: '0.8rem', color: 'white' }}>Enforce Strict TypeScript Checks</span>
+                        <input 
+                          type="checkbox" 
+                          checked={copilotStrict} 
+                          onChange={(e) => setCopilotStrict(e.target.checked)} 
+                          style={{ cursor: 'pointer' }}
+                        />
+                      </div>
+
+                      <button 
+                        className="btn-primary" 
+                        onClick={handleGenerateCode} 
+                        disabled={copilotLoading}
+                        style={{ padding: '10px', marginTop: '4px', background: 'var(--accent-cyan)', color: '#000', fontWeight: 'bold' }}
+                      >
+                        {copilotLoading ? '🔄 Parsing & Compiling...' : '⚡ Generate & Verify'}
+                      </button>
+                    </div>
+
+                    {copilotGeneratedCode && (
+                      <div style={{ marginTop: '20px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                          <span style={{ fontSize: '0.8rem', fontWeight: 'bold', color: 'white' }}>Generated Code</span>
+                          <button 
+                            className="btn-primary" 
+                            style={{ padding: '3px 8px', fontSize: '0.7rem', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border-glass)' }}
+                            onClick={() => {
+                              navigator.clipboard.writeText(copilotGeneratedCode);
+                              alert('Code copied!');
+                            }}
+                          >
+                            📋 Copy Code
+                          </button>
+                        </div>
+                        <pre style={{ background: '#070a13', border: '1px solid var(--border-glass)', padding: '12px', borderRadius: 'var(--radius-md)', fontSize: '0.8rem', overflowX: 'auto', maxHeight: '250px', fontFamily: 'var(--font-mono)' }}>
+                          <code>{copilotGeneratedCode}</code>
+                        </pre>
+
+                        {/* Compiler test result */}
+                        <div style={{ marginTop: '14px', background: copilotCompiles ? 'rgba(16, 185, 129, 0.05)' : 'rgba(239, 68, 68, 0.05)', border: `1px solid ${copilotCompiles ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)'}`, padding: '12px', borderRadius: 'var(--radius-md)' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+                            <span style={{ fontSize: '1rem' }}>{copilotCompiles ? '✅' : '❌'}</span>
+                            <strong style={{ fontSize: '0.82rem', color: copilotCompiles ? '#10b981' : '#ef4444' }}>
+                              {copilotCompiles ? 'COMPILATION SUCCESSFUL (Strict Mode)' : 'COMPILATION FAILED'}
+                            </strong>
+                          </div>
+                          {copilotCompileLogs && (
+                            <pre style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', background: 'rgba(0,0,0,0.2)', padding: '8px', borderRadius: 'var(--radius-sm)', overflowX: 'auto', maxHeight: '120px', margin: 0, fontFamily: 'var(--font-mono)' }}>
+                              {copilotCompileLogs}
+                            </pre>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Memory Palace Search Card */}
+                  <div className="panel" style={{ borderLeft: '4px solid #a855f7', background: 'var(--bg-card)', padding: '24px', borderRadius: 'var(--radius-lg)' }}>
+                    <h3 className="card-title" style={{ color: '#a855f7', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      🧠 Contextual Memory Weaver
+                    </h3>
+                    <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '16px' }}>
+                      Query your persistent profile to recall context or inject specific coding memories into the generator.
+                    </p>
+
+                    <div style={{ display: 'flex', gap: '10px', marginBottom: '14px' }}>
+                      <input 
+                        type="text" 
+                        className="form-control"
+                        placeholder="Search profile memory (e.g. typing preferences, system configuration)"
+                        value={copilotMemoryQuery}
+                        onChange={(e) => setCopilotMemoryQuery(e.target.value)}
+                        style={{ flexGrow: 1 }}
+                        onKeyDown={(e) => e.key === 'Enter' && handleSearchMemory()}
+                      />
+                      <button 
+                        className="btn-primary" 
+                        onClick={handleSearchMemory}
+                        disabled={copilotSearchingMemory}
+                        style={{ padding: '0 16px', background: '#a855f7', border: 'none', color: 'white', fontWeight: 'bold' }}
+                      >
+                        🔍 Search
+                      </button>
+                    </div>
+
+                    {copilotMemoryResults.length > 0 && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '200px', overflowY: 'auto' }}>
+                        {copilotMemoryResults.map((res, i) => (
+                          <div key={i} style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid var(--border-glass)', padding: '10px 14px', borderRadius: 'var(--radius-md)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <div style={{ flexGrow: 1 }}>
+                              <p style={{ fontSize: '0.8rem', color: 'white', margin: 0 }}>{res.fact}</p>
+                              <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>Score: {res.score}</span>
+                            </div>
+                            <button 
+                              className="btn-primary"
+                              style={{ padding: '4px 8px', fontSize: '0.7rem', background: 'rgba(168, 85, 247, 0.1)', border: '1px solid rgba(168, 85, 247, 0.2)', color: '#c084fc', marginLeft: '12px' }}
+                              onClick={() => {
+                                setCopilotDesc(prev => prev ? prev + '\nContext: ' + res.fact : 'Context: ' + res.fact);
+                              }}
+                            >
+                              ➕ Inject
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Right Column: Code Auditor & Linter */}
+                <div className="panel" style={{ borderLeft: '4px solid #eab308', background: 'var(--bg-card)', padding: '24px', borderRadius: 'var(--radius-lg)', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                  <div>
+                    <h3 className="card-title" style={{ color: '#eab308', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      🧭 Linter & InfoSec Code Auditor
+                    </h3>
+                    <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                      Load a local repository file or paste custom code to check type safety leaks, implicit type casts, and InfoSec risks.
+                    </p>
+                  </div>
+
+                  <div>
+                    <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>Load Local File</label>
+                    <select 
+                      className="form-control"
+                      value={copilotSelectedFile}
+                      onChange={(e) => handleLoadFileToAnalyze(e.target.value)}
+                      style={{ width: '100%' }}
+                    >
+                      <option value="">-- Choose file from workspace --</option>
+                      {copilotFileList.map((file, idx) => (
+                        <option key={idx} value={file}>{file}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div style={{ flexGrow: 1, display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    <div style={{ flexGrow: 1, display: 'flex', flexDirection: 'column' }}>
+                      <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>Code to Analyze</label>
+                      <textarea 
+                        className="form-control"
+                        rows="12"
+                        value={copilotCodeToAnalyze}
+                        onChange={(e) => setCopilotCodeToAnalyze(e.target.value)}
+                        placeholder="Paste code or choose a file above..."
+                        style={{ width: '100%', flexGrow: 1, resize: 'none', fontFamily: 'var(--font-mono)', fontSize: '0.8rem' }}
+                      />
+                    </div>
+
+                    <button 
+                      className="btn-primary" 
+                      onClick={handleAnalyzeCode}
+                      disabled={copilotAnalyzing}
+                      style={{ padding: '10px', background: '#eab308', border: 'none', color: 'black', fontWeight: 'bold' }}
+                    >
+                      {copilotAnalyzing ? '🔍 Running Linter Analysis...' : '🔎 Run Code Audit'}
+                    </button>
+                  </div>
+
+                  {copilotAnalysisFindings.length > 0 && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '12px', maxHeight: '350px', overflowY: 'auto', paddingRight: '4px' }}>
+                      <h4 style={{ fontSize: '0.85rem', fontWeight: 'bold', color: 'white' }}>Audit Findings:</h4>
+                      {copilotAnalysisFindings.map((finding, idx) => (
+                        <div 
+                          key={idx} 
+                          style={{ 
+                            background: 'rgba(255,255,255,0.01)', 
+                            border: '1px solid var(--border-glass)', 
+                            borderLeft: `4px solid ${finding.type === 'danger' ? '#ef4444' : finding.type === 'warning' ? '#eab308' : '#06b6d4'}`,
+                            padding: '14px', 
+                            borderRadius: 'var(--radius-md)' 
+                          }}
+                        >
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                            <strong style={{ fontSize: '0.85rem', color: 'white' }}>{finding.title}</strong>
+                            <span style={{ 
+                              fontSize: '0.65rem', 
+                              fontWeight: 'bold', 
+                              padding: '2px 6px', 
+                              borderRadius: '4px',
+                              background: finding.type === 'danger' ? 'rgba(239, 68, 68, 0.1)' : finding.type === 'warning' ? 'rgba(234, 179, 8, 0.1)' : 'rgba(6, 182, 212, 0.1)',
+                              color: finding.type === 'danger' ? '#f87171' : finding.type === 'warning' ? '#facc15' : '#22d3ee',
+                              textTransform: 'uppercase'
+                            }}>
+                              {finding.type}
+                            </span>
+                          </div>
+                          <p style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', margin: '0 0 10px 0', lineHeight: '1.4' }}>
+                            {finding.description}
+                          </p>
+                          {finding.code && (
+                            <div>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                                <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Suggested Code:</span>
+                                <button 
+                                  className="btn-primary" 
+                                  style={{ padding: '2px 6px', fontSize: '0.65rem', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border-glass)' }}
+                                  onClick={() => {
+                                    navigator.clipboard.writeText(finding.code);
+                                    alert('Suggestion copied!');
+                                  }}
+                                >
+                                  Copy Suggestion
+                                </button>
+                              </div>
+                              <pre style={{ background: '#070a13', border: '1px solid var(--border-glass)', padding: '8px', borderRadius: 'var(--radius-sm)', fontSize: '0.75rem', overflowX: 'auto', margin: 0, fontFamily: 'var(--font-mono)' }}>
+                                <code>{finding.code}</code>
+                              </pre>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
               </div>

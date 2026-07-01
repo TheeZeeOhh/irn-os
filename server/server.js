@@ -993,6 +993,172 @@ app.post('/api/arena/benchmark', async (req, res) => {
   res.json({ success: true, results });
 });
 
+// Co-Pilot strictly-typed Code Generator Endpoint
+app.post('/api/copilot/generate-code', async (req, res) => {
+  const { description, signature, strictSettings, provider, model } = req.body;
+
+  const config = readConfig();
+  const activeProvider = provider || config.settings.activeProvider;
+  const activeModel = model || config.settings.defaultModel;
+
+  const systemPrompt = `You are a world-class TypeScript architect.
+Your task is to write a strictly-typed TypeScript function based on the user's description and signature.
+Rules:
+- DO NOT use the 'any' type under any circumstance. Use 'unknown' or specify precise types/interfaces.
+- Enforce strict typing.
+- DO NOT wrap the code in markdown formatting (like \`\`\`typescript). Output ONLY valid TypeScript code and nothing else.
+- Add concise comments explaining the type choices.`;
+
+  const userPrompt = `Function Signature: ${signature || 'None specified'}
+Description: ${description}
+Enforce strict settings: ${strictSettings ? 'Yes' : 'No'}
+`;
+
+  try {
+    const result = await generateCompletion({
+      provider: activeProvider,
+      model: activeModel,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt }
+      ]
+    });
+
+    let code = result.text || '';
+    code = code.replace(/```typescript/g, '').replace(/```javascript/g, '').replace(/```ts/g, '').replace(/```/g, '').trim();
+
+    const scratchDir = path.join(process.cwd(), 'scratch');
+    if (!fs.existsSync(scratchDir)) {
+      fs.mkdirSync(scratchDir, { recursive: true });
+    }
+    const tempFile = path.join(scratchDir, 'temp_compile.ts');
+    fs.writeFileSync(tempFile, code, 'utf8');
+
+    exec(`npx tsc ${tempFile} --noEmit --strict --target es2022`, (err, stdout, stderr) => {
+      let compileLogs = stdout || stderr || '';
+      compileLogs = compileLogs.replaceAll(tempFile, 'GeneratedCode.ts');
+      const success = !err;
+      res.json({
+        success: true,
+        code,
+        compiles: success,
+        compileLogs
+      });
+    });
+  } catch (err) {
+    console.error('Co-pilot generation error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Co-Pilot Linter & Code Auditor Endpoint
+app.post('/api/copilot/analyze', async (req, res) => {
+  const { code, provider, model } = req.body;
+  if (!code) {
+    return res.status(400).json({ error: 'Code content is required.' });
+  }
+
+  const config = readConfig();
+  const activeProvider = provider || config.settings.activeProvider;
+  const activeModel = model || config.settings.defaultModel;
+
+  const systemPrompt = `You are a TypeScript linter and security audit engine.
+Analyze the following code for:
+1. Type safety issues (specifically use of 'any', unhandled undefined/null, or implicit casting).
+2. Architectural suggestions (Zod validation, immutability patterns, read-only types).
+3. Security/InfoSec risks (InfoSec as Witchcraft: local-first, zero-trust, credentials leak).
+
+Output your findings as a clean, structured JSON array of objects.
+Format:
+[
+  {
+    "type": "warning" | "tip" | "danger",
+    "title": "Short title",
+    "description": "Detail on the issue and how to resolve it strictly.",
+    "code": "Suggested replacement code"
+  }
+]
+Output ONLY the raw JSON array. Do not write markdown, code blocks, or preamble.`;
+
+  try {
+    const result = await generateCompletion({
+      provider: activeProvider,
+      model: activeModel,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: code }
+      ]
+    });
+
+    let rawText = result.text || '[]';
+    rawText = rawText.replace(/```json/g, '').replace(/```/g, '').trim();
+    
+    let findings = [];
+    try {
+      findings = JSON.parse(rawText);
+    } catch (e) {
+      findings = [{
+        type: 'tip',
+        title: 'Analysis Results',
+        description: rawText,
+        code: ''
+      }];
+    }
+
+    res.json({ success: true, findings });
+  } catch (err) {
+    console.error('Co-pilot analysis error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Co-Pilot secure workspace file reader
+app.get('/api/copilot/read-file', (req, res) => {
+  const { filePath } = req.query;
+  if (!filePath) return res.status(400).json({ error: 'filePath is required' });
+
+  const cleanPath = path.normalize(filePath).replace(/^(\.\.(\/|\\))+/, '');
+  const absolutePath = path.join(process.cwd(), cleanPath);
+
+  if (!absolutePath.startsWith(process.cwd())) {
+    return res.status(403).json({ error: 'Access denied. Outside of workspace.' });
+  }
+
+  try {
+    if (!fs.existsSync(absolutePath)) {
+      return res.status(404).json({ error: 'File not found' });
+    }
+    const content = fs.readFileSync(absolutePath, 'utf8');
+    res.json({ success: true, content });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Co-Pilot local workspace file lister
+app.get('/api/copilot/list-files', (req, res) => {
+  const listFilesRecursively = (dir, fileList = []) => {
+    const files = fs.readdirSync(dir);
+    files.forEach(file => {
+      if (['node_modules', '.git', 'dist', '.gemini'].includes(file)) return;
+      const filePath = path.join(dir, file);
+      if (fs.statSync(filePath).isDirectory()) {
+        listFilesRecursively(filePath, fileList);
+      } else {
+        fileList.push(path.relative(process.cwd(), filePath));
+      }
+    });
+    return fileList;
+  };
+
+  try {
+    const files = listFilesRecursively(process.cwd());
+    res.json({ success: true, files });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Serve static files from the React dist directory
 import path from 'path';
 import { fileURLToPath } from 'url';
