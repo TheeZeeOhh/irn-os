@@ -2,22 +2,39 @@ import React, { useState, useEffect, useRef } from 'react';
 
 const tracks = [
   {
+    title: "WPFW 89.3 FM - Jazz & Justice",
+    artist: "Washington D.C. Pacifica Live",
+    src: "https://ice2.securenetsystems.net/WPFW",
+    cover: "/irn-crest.png",
+    isLive: true
+  },
+  {
+    title: "WBAI 99.5 FM - Progressive Radio",
+    artist: "New York City Pacifica Live",
+    src: "http://stream.wbai.org:8000/wbai_128",
+    cover: "/irn-crest.png",
+    isLive: true
+  },
+  {
+    title: "KPFK 90.7 FM - Los Angeles Live",
+    artist: "Southern California Pacifica Live",
+    src: "http://stream.kpfk.org:8000/kpfk_128",
+    cover: "/irn-crest.png",
+    isLive: true
+  },
+  {
     title: "Amina: Community Welcome",
     artist: "Injustice Reform Network",
     src: "https://theezeeohh.github.io/injusticereformnetwork/thezeeohh/amina-greeting.mp4",
-    cover: "/irn-crest.png"
-  },
-  {
-    title: "Amina: First Amendment Campaign",
-    artist: "Injustice Reform Network",
-    src: "https://theezeeohh.github.io/injusticereformnetwork/thezeeohh/amina-first-amendment.mp4",
-    cover: "/irn-crest.png"
+    cover: "/irn-crest.png",
+    isLive: false
   },
   {
     title: "Amina: Strategic Briefing",
     artist: "Injustice Reform Network",
     src: "https://theezeeohh.github.io/injusticereformnetwork/thezeeohh/amina-campaign-strategy.mp4",
-    cover: "/irn-crest.png"
+    cover: "/irn-crest.png",
+    isLive: false
   }
 ];
 
@@ -4406,18 +4423,25 @@ model = get_peft_model(model, peft_config)
             </button>
           </div>
 
-          <div className="player-progress-bar-wrap">
-            <span className="player-time">{formatTime(currentTime)}</span>
-            <input 
-              type="range" 
-              className="player-slider"
-              min="0"
-              max={duration || 0}
-              value={currentTime}
-              onChange={handleSeek}
-            />
-            <span className="player-time">{formatTime(duration)}</span>
-          </div>
+          {tracks[currentTrackIndex].isLive ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--accent-red)', fontSize: '0.8rem', fontWeight: 'bold', height: '20px' }}>
+              <span className="status-dot" style={{ background: 'var(--accent-red)', boxShadow: '0 0 8px var(--accent-red)' }}></span>
+              LIVE STREAM
+            </div>
+          ) : (
+            <div className="player-progress-bar-wrap">
+              <span className="player-time">{formatTime(currentTime)}</span>
+              <input 
+                type="range" 
+                className="player-slider"
+                min="0"
+                max={duration || 0}
+                value={currentTime}
+                onChange={handleSeek}
+              />
+              <span className="player-time">{formatTime(duration)}</span>
+            </div>
+          )}
         </div>
 
         {/* Right Volume / Tools */}
