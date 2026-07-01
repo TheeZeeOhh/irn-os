@@ -1,5 +1,26 @@
 import React, { useState, useEffect, useRef } from 'react';
 
+const tracks = [
+  {
+    title: "Amina: Community Welcome",
+    artist: "Injustice Reform Network",
+    src: "https://theezeeohh.github.io/injusticereformnetwork/thezeeohh/amina-greeting.mp4",
+    cover: "/irn-crest.png"
+  },
+  {
+    title: "Amina: First Amendment Campaign",
+    artist: "Injustice Reform Network",
+    src: "https://theezeeohh.github.io/injusticereformnetwork/thezeeohh/amina-first-amendment.mp4",
+    cover: "/irn-crest.png"
+  },
+  {
+    title: "Amina: Strategic Briefing",
+    artist: "Injustice Reform Network",
+    src: "https://theezeeohh.github.io/injusticereformnetwork/thezeeohh/amina-campaign-strategy.mp4",
+    cover: "/irn-crest.png"
+  }
+];
+
 export default function App() {
   const [activeTab, setActiveTab] = useState('chat');
   const [config, setConfig] = useState(null);
@@ -111,11 +132,116 @@ export default function App() {
   const [compressedText, setCompressedText] = useState('');
   const [compressionSavings, setCompressionSavings] = useState(null);
 
-  // Outreach and Media states
   const [outreachCampaignType, setOutreachCampaignType] = useState('grassroots');
   const [outreachDetails, setOutreachDetails] = useState('');
   const [outreachGeneratedPitch, setOutreachGeneratedPitch] = useState('');
   const [outreachLoading, setOutreachLoading] = useState(false);
+
+  // Spotify Player States
+  const [currentTrackIndex, setCurrentTrackIndex] = useState(0);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [volume, setVolume] = useState(0.8);
+  const [isMuted, setIsMuted] = useState(false);
+  const [isShuffle, setIsShuffle] = useState(false);
+  const [isRepeat, setIsRepeat] = useState(false);
+  const [likedTracks, setLikedTracks] = useState({});
+  const audioRef = useRef(null);
+
+  useEffect(() => {
+    if (audioRef.current) {
+      audioRef.current.volume = volume;
+    }
+  }, [volume]);
+
+  useEffect(() => {
+    if (audioRef.current) {
+      audioRef.current.load();
+      if (isPlaying) {
+        audioRef.current.play().catch(err => console.log('Autoplay blocked:', err));
+      }
+    }
+  }, [currentTrackIndex]);
+
+  const handlePlayPause = () => {
+    if (!audioRef.current) return;
+    if (isPlaying) {
+      audioRef.current.pause();
+      setIsPlaying(false);
+    } else {
+      audioRef.current.play().then(() => {
+        setIsPlaying(true);
+      }).catch(err => console.log('Audio playback error:', err));
+    }
+  };
+
+  const handleTimeUpdate = () => {
+    if (audioRef.current) {
+      setCurrentTime(audioRef.current.currentTime);
+    }
+  };
+
+  const handleLoadedMetadata = () => {
+    if (audioRef.current) {
+      setDuration(audioRef.current.duration);
+    }
+  };
+
+  const handleAudioEnded = () => {
+    if (isRepeat) {
+      if (audioRef.current) {
+        audioRef.current.currentTime = 0;
+        audioRef.current.play();
+      }
+    } else {
+      handleNextTrack();
+    }
+  };
+
+  const handleNextTrack = () => {
+    if (isShuffle) {
+      const rand = Math.floor(Math.random() * tracks.length);
+      setCurrentTrackIndex(rand);
+    } else {
+      setCurrentTrackIndex((prev) => (prev + 1) % tracks.length);
+    }
+  };
+
+  const handlePrevTrack = () => {
+    setCurrentTrackIndex((prev) => (prev - 1 + tracks.length) % tracks.length);
+  };
+
+  const handleSeek = (e) => {
+    const time = parseFloat(e.target.value);
+    setCurrentTime(time);
+    if (audioRef.current) {
+      audioRef.current.currentTime = time;
+    }
+  };
+
+  const formatTime = (time) => {
+    if (isNaN(time)) return "0:00";
+    const mins = Math.floor(time / 60);
+    const secs = Math.floor(time % 60);
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  const toggleMute = () => {
+    if (!audioRef.current) return;
+    if (isMuted) {
+      audioRef.current.volume = volume;
+      setIsMuted(false);
+    } else {
+      audioRef.current.volume = 0;
+      setIsMuted(true);
+    }
+  };
+
+  const toggleLike = (idx) => {
+    setLikedTracks(prev => ({ ...prev, [idx]: !prev[idx] }));
+  };
+
   const [compressionMode, setCompressionMode] = useState('code'); // 'code' or 'text'
   const [compressorOpen, setCompressorOpen] = useState(false);
   const [gatingEnabled, setGatingEnabled] = useState(false);
@@ -1264,7 +1390,8 @@ Follow the Aziza Code:
   }
 
   return (
-    <div className="app-container">
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', width: '100vw', overflow: 'hidden' }}>
+      <div className="app-container" style={{ flexGrow: 1, height: 'calc(100vh - 90px)', borderBottom: 'none' }}>
       {/* Sidebar */}
       <div className="sidebar">
         <div>
@@ -4224,6 +4351,101 @@ model = get_peft_model(model, peft_config)
             </div>
           )}
         </div>
+      </div>
+      </div>
+      
+      {/* Spotify Player Bar */}
+      <div className="player-bar">
+        {/* Left Track Info */}
+        <div className="player-track-info">
+          <img 
+            src={tracks[currentTrackIndex].cover} 
+            alt="Track Cover" 
+            className={`player-cover ${isPlaying ? 'playing' : ''}`} 
+          />
+          <div>
+            <h4 style={{ fontSize: '0.85rem', color: 'white', fontWeight: 'bold', marginBottom: '2px' }}>
+              {tracks[currentTrackIndex].title}
+            </h4>
+            <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+              {tracks[currentTrackIndex].artist}
+            </p>
+          </div>
+          <button 
+            className={`player-btn ${likedTracks[currentTrackIndex] ? 'active' : ''}`}
+            onClick={() => toggleLike(currentTrackIndex)}
+            style={{ marginLeft: '12px' }}
+          >
+            {likedTracks[currentTrackIndex] ? '❤️' : '🤍'}
+          </button>
+        </div>
+
+        {/* Center Controls */}
+        <div className="player-controls-container">
+          <div className="player-controls">
+            <button 
+              className={`player-btn ${isShuffle ? 'active' : ''}`} 
+              onClick={() => setIsShuffle(!isShuffle)}
+            >
+              🔀
+            </button>
+            <button className="player-btn" onClick={handlePrevTrack}>
+              ⏮️
+            </button>
+            <button className="player-btn play" onClick={handlePlayPause}>
+              {isPlaying ? '⏸️' : '▶️'}
+            </button>
+            <button className="player-btn" onClick={handleNextTrack}>
+              ⏭️
+            </button>
+            <button 
+              className={`player-btn ${isRepeat ? 'active' : ''}`} 
+              onClick={() => setIsRepeat(!isRepeat)}
+            >
+              🔁
+            </button>
+          </div>
+
+          <div className="player-progress-bar-wrap">
+            <span className="player-time">{formatTime(currentTime)}</span>
+            <input 
+              type="range" 
+              className="player-slider"
+              min="0"
+              max={duration || 0}
+              value={currentTime}
+              onChange={handleSeek}
+            />
+            <span className="player-time">{formatTime(duration)}</span>
+          </div>
+        </div>
+
+        {/* Right Volume / Tools */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', justifyContent: 'flex-end', width: '30%' }}>
+          <button className="player-btn" onClick={toggleMute}>
+            {isMuted || volume === 0 ? '🔇' : '🔊'}
+          </button>
+          <input 
+            type="range" 
+            className="player-slider player-slider-vol"
+            min="0"
+            max="1"
+            step="0.05"
+            value={isMuted ? 0 : volume}
+            onChange={(e) => {
+              setVolume(parseFloat(e.target.value));
+              setIsMuted(false);
+            }}
+          />
+        </div>
+
+        <audio
+          ref={audioRef}
+          src={tracks[currentTrackIndex].src}
+          onTimeUpdate={handleTimeUpdate}
+          onLoadedMetadata={handleLoadedMetadata}
+          onEnded={handleAudioEnded}
+        />
       </div>
     </div>
   );
