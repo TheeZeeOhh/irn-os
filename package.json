@@ -15,7 +15,7 @@
   "scripts": {
     "start": "node bin/cli.js",
     "server": "node server/server.js",
-    "client:dev": "vite client --host",
+    "client:dev": "vite client --host --config vite.config.js",
     "client:build": "vite build",
     "dev": "concurrently \"npm run server\" \"npm run client:dev\""
   },

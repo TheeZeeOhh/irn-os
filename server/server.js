@@ -144,6 +144,41 @@ app.post('/api/terminal', (req, res) => {
   });
 });
 
+// Workspace File tree indexer API
+app.get('/api/workspace/files', (req, res) => {
+  const rootDir = process.cwd();
+  const indexDir = (dir) => {
+    let results = [];
+    const list = fs.readdirSync(dir);
+    list.forEach(file => {
+      if (file === 'node_modules' || file === '.git' || file === '.next' || file === 'dist') return;
+      const fullPath = path.join(dir, file);
+      const stat = fs.statSync(fullPath);
+      if (stat && stat.isDirectory()) {
+        results.push({
+          name: file,
+          path: fullPath.replace(rootDir, ''),
+          type: 'directory',
+          children: indexDir(fullPath)
+        });
+      } else {
+        results.push({
+          name: file,
+          path: fullPath.replace(rootDir, ''),
+          type: 'file'
+        });
+      }
+    });
+    return results;
+  };
+  try {
+    const tree = indexDir(rootDir);
+    res.json({ success: true, tree });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Telemetry computations
 app.get('/api/telemetry', (req, res) => {
   const config = readConfig();
@@ -357,6 +392,17 @@ app.get('/api/templates', (req, res) => {
   res.json(config.templates || []);
 });
 
+// GET advocacy prompts from downloaded database
+import fs from 'fs';
+app.get('/api/advocacy-prompts', (req, res) => {
+  try {
+    const data = fs.readFileSync(path.join(__dirname, 'advocacy_prompts.json'), 'utf8');
+    res.json(JSON.parse(data));
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to load advocacy prompts: ' + err.message });
+  }
+});
+
 app.post('/api/templates', (req, res) => {
   const { template } = req.body;
   if (!template || !template.title || !template.text) {
@@ -382,6 +428,96 @@ app.delete('/api/templates/:id', (req, res) => {
     writeConfig(config);
   }
   res.json({ success: true, templates: config.templates || [] });
+});
+
+// Prompt Versioning Timeline
+app.get('/api/templates/:id/versions', (req, res) => {
+  const config = readConfig();
+  const history = config.templateVersions?.[req.params.id] || [];
+  res.json(history);
+});
+
+app.post('/api/templates/:id/versions', (req, res) => {
+  const { title, text, commitMsg } = req.body;
+  const config = readConfig();
+  if (!config.templateVersions) config.templateVersions = {};
+  if (!config.templateVersions[req.params.id]) config.templateVersions[req.params.id] = [];
+  
+  const versionEntry = {
+    versionId: `v-${Date.now()}`,
+    title,
+    text,
+    commitMsg: commitMsg || 'Updated template',
+    timestamp: Date.now()
+  };
+  config.templateVersions[req.params.id].push(versionEntry);
+  
+  // Also update the active template version
+  if (config.templates) {
+    const tIdx = config.templates.findIndex(t => t.id === req.params.id);
+    if (tIdx >= 0) {
+      config.templates[tIdx].title = title;
+      config.templates[tIdx].text = text;
+    }
+  }
+  
+  writeConfig(config);
+  res.json({ success: true, versions: config.templateVersions[req.params.id], templates: config.templates });
+});
+
+// Export conversation or template directly to Notion database
+app.post('/api/integrations/notion/export', async (req, res) => {
+  const { title, type, content } = req.body;
+  const config = readConfig();
+  const notionConfig = config.integrations?.notion || {};
+  const notionToken = notionConfig.apiKey;
+  const dbId = notionConfig.databaseId;
+
+  if (!notionToken || !dbId) {
+    return res.json({
+      success: false,
+      mode: 'sandbox',
+      message: 'Notion is not configured. Please supply an API key and Database ID in Settings.',
+      notionUrl: `https://notion.so/theezeeohh/SandboxExport-${Math.random().toString(36).substring(7)}`
+    });
+  }
+
+  try {
+    const notion = new NotionClient({ auth: notionToken });
+    const response = await notion.pages.create({
+      parent: { database_id: dbId },
+      properties: {
+        title: {
+          title: [
+            {
+              text: {
+                content: `[IRN-OS Export: ${type}] ${title}`
+              }
+            }
+          ]
+        }
+      },
+      children: [
+        {
+          object: 'block',
+          type: 'paragraph',
+          paragraph: {
+            rich_text: [
+              {
+                type: 'text',
+                text: {
+                  content: content.substring(0, 2000)
+                }
+              }
+            ]
+          }
+        }
+      ]
+    });
+    res.json({ success: true, mode: 'live', message: 'Successfully exported to Notion database!', notionUrl: response.url });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Mathematical constants & calculations endpoint
@@ -725,6 +861,136 @@ app.post('/api/mcp/notion', async (req, res) => {
     message: `(Sandbox Mode) Page "${pageTitle || 'Untitled'}" synced with Notion.`,
     notionUrl: `https://notion.so/theezeeohh/Workspace-${Math.random().toString(36).substring(7)}`
   });
+});
+
+// Notion Database structural template creator API
+app.post('/api/integrations/notion/create-database', async (req, res) => {
+  const { title, parentPageId } = req.body;
+  const config = readConfig();
+  const notionConfig = config.integrations?.notion || {};
+  const notionToken = notionConfig.apiKey;
+
+  if (!notionToken || !parentPageId) {
+    return res.json({
+      success: false,
+      mode: 'sandbox',
+      message: 'Notion credentials or Parent Page ID missing. (Simulation mode: Database created!)',
+      databaseId: `db-${Date.now()}`
+    });
+  }
+
+  try {
+    const notion = new NotionClient({ auth: notionToken });
+    const response = await notion.databases.create({
+      parent: { page_id: parentPageId },
+      title: [
+        {
+          type: 'text',
+          text: { content: title || 'IRN-OS Task Tracker Database' }
+        }
+      ],
+      properties: {
+        Name: { title: {} },
+        Status: {
+          select: {
+            options: [
+              { name: 'To Do', color: 'red' },
+              { name: 'In Progress', color: 'blue' },
+              { name: 'Completed', color: 'green' }
+            ]
+          }
+        },
+        Priority: {
+          select: {
+            options: [
+              { name: 'High', color: 'orange' },
+              { name: 'Medium', color: 'yellow' },
+              { name: 'Low', color: 'gray' }
+            ]
+          }
+        }
+      }
+    });
+
+    // Automatically update local integration config databaseId
+    config.integrations.notion.databaseId = response.id;
+    writeConfig(config);
+
+    res.json({ success: true, mode: 'live', message: 'Notion structural database generated successfully!', databaseId: response.id });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Markdown File Workspace Exporter API
+app.post('/api/workspace/export-markdown', (req, res) => {
+  const { filename, content, title } = req.body;
+  if (!content) return res.status(400).json({ error: 'Content is required' });
+  const exportPath = path.join(process.cwd(), filename || `export-${Date.now()}.md`);
+  const header = `# ${title || 'IRN-OS Exported Document'}\n*Saved on: ${new Date().toLocaleString()}*\n\n---\n\n`;
+  try {
+    fs.writeFileSync(exportPath, header + content, 'utf8');
+    res.json({ success: true, message: `Markdown successfully exported to: ${exportPath}`, path: exportPath });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Semantic Vector Similarity Memory Search Engine Simulation
+app.post('/api/memory/search', (req, res) => {
+  const { query } = req.body;
+  if (!query) return res.status(400).json({ error: 'Query is required' });
+  const config = readConfig();
+  const memories = config.memory || [];
+  
+  // Simple TF-IDF cosine-similarity approximation on keywords
+  const queryWords = query.toLowerCase().split(/\s+/);
+  const results = memories.map(mem => {
+    const memWords = mem.toLowerCase().split(/\s+/);
+    let intersection = 0;
+    queryWords.forEach(qw => {
+      if (memWords.includes(qw)) intersection += 1;
+    });
+    const score = intersection / Math.sqrt(queryWords.length * memWords.length || 1);
+    return { fact: mem, score: Number(score.toFixed(3)) };
+  }).sort((a, b) => b.score - a.score);
+
+  res.json({ success: true, results });
+});
+
+// Arena stress-test model performance benchmarks API
+app.post('/api/arena/benchmark', async (req, res) => {
+  const { models } = req.body;
+  if (!models || !Array.isArray(models) || models.length === 0) {
+    return res.status(400).json({ error: 'Models list is required' });
+  }
+  const benchmarkRuns = models.map(async (model) => {
+    const provider = model.includes('gemini') ? 'gemini' : model.includes('claude') ? 'anthropic' : model.includes('gpt') ? 'openai' : 'ollama';
+    const testPrompt = "Synthesize a single sentence definition of machine learning.";
+    const start = Date.now();
+    try {
+      const chatRes = await generateCompletion({
+        provider,
+        model,
+        messages: [{ role: 'user', content: testPrompt }]
+      });
+      const duration = (Date.now() - start) / 1000;
+      const textLen = chatRes.text ? chatRes.text.length : 0;
+      const tokens = Math.ceil(textLen / 4);
+      return {
+        model,
+        success: true,
+        latency: Number(duration.toFixed(3)),
+        tokensPerSecond: Number((tokens / (duration || 0.1)).toFixed(1)),
+        tokens
+      };
+    } catch (err) {
+      return { model, success: false, error: err.message };
+    }
+  });
+
+  const results = await Promise.all(benchmarkRuns);
+  res.json({ success: true, results });
 });
 
 // Serve static files from the React dist directory
